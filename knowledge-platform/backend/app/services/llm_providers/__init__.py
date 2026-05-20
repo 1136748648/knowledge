@@ -1,10 +1,6 @@
 from .base import BaseLLMProvider
 from .openai_provider import OpenAIProvider
-from .anthropic_provider import AnthropicProvider
 from .zhipu_provider import ZhipuProvider
-from .qwen_provider import QwenProvider
-from .wenxin_provider import WenxinProvider
-from .moonshot_provider import MoonshotProvider
 from .deepseek_provider import DeepseekProvider
 from .ollama_provider import OllamaProvider
 
@@ -62,11 +58,7 @@ class ProviderRegistry:
 # 注册所有内置提供商
 for provider_cls in [
     OpenAIProvider,
-    AnthropicProvider,
     ZhipuProvider,
-    QwenProvider,
-    WenxinProvider,
-    MoonshotProvider,
     DeepseekProvider,
     OllamaProvider,
 ]:
@@ -76,11 +68,7 @@ __all__ = [
     "BaseLLMProvider",
     "ProviderRegistry",
     "OpenAIProvider",
-    "AnthropicProvider",
     "ZhipuProvider",
-    "QwenProvider",
-    "WenxinProvider",
-    "MoonshotProvider",
     "DeepseekProvider",
     "OllamaProvider",
 ]

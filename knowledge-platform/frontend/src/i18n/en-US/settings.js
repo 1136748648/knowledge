@@ -17,9 +17,9 @@ export default {
     apiBase: 'API Base URL',
     chatModel: 'Chat Model',
     embeddingModel: 'Embedding Model',
-    modelPlaceholder: 'Select or enter',
+    modelPlaceholder: 'Enter chat model name',
+    embeddingModelPlaceholder: 'Enter embedding model name',
     embeddingDim: 'Embedding Dimension',
-    supportsEmbedding: 'Supports Embedding',
     jsonConfig: 'Config JSON',
     jsonActions: {
       syncFromForm: 'Sync from Form',

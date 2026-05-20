@@ -9,7 +9,6 @@ export default {
     next: '下一步',
     submit: '开始初始化',
     fetch: '获取模型',
-    fetchModels: '获取模型',
     saveConfig: '保存配置',
     changePassword: '修改密码',
     syncFromForm: '从表单同步',
@@ -25,7 +24,6 @@ export default {
     testing: '测试连接...',
     creating: '创建中...',
     deleting: '删除中...',
-    fetchingModels: '正在获取模型列表...',
     normal: '正常',
   },
   action: {

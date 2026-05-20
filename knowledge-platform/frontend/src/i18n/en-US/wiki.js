@@ -18,8 +18,15 @@ export default {
     sensitivityLabel: 'Sensitivity',
     contentLabel: 'Content',
     contentPlaceholder: 'Markdown content',
+    preview: 'Preview',
     required: 'Please fill in all required fields',
     success: 'Document created successfully',
     failed: 'Creation failed',
+  },
+  edit: {
+    success: 'Document updated',
+  },
+  delete: {
+    confirm: 'Are you sure to delete this document? This action cannot be undone.',
   },
 }

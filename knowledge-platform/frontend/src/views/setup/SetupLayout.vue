@@ -120,7 +120,7 @@
             <el-collapse-item :title="t('setup.milvus.installGuide')" name="milvus">
               <div class="guide-content">
                 <p><strong>{{ t('setup.milvus.dockerInstall') }}：</strong></p>
-                <div class="code-inline">docker run -d --name milvus -p 19530:19530 -p 19531:19531 milvusdb/milvus:latest</div>
+                <div class="code-inline">docker run -d --name milvus -p 19530:19530 -p 9091:9091 milvusdb/milvus:latest</div>
                 <p>{{ t('setup.milvus.website') }}：<a href="https://milvus.io" target="_blank">milvus.io</a></p>
               </div>
             </el-collapse-item>
@@ -129,41 +129,29 @@
 
         <!-- Step 3: LLM -->
         <div v-if="currentStep === 3">
-          <el-form label-position="top" v-loading="fetchingModels" :element-loading-text="t('common.status.fetchingModels')">
+          <el-form label-position="top">
             <el-form-item :label="t('setup.llm.provider')">
-              <el-select v-model="form.llm.provider" filterable allow-create :placeholder="t('setup.llm.providerPlaceholder')" @change="onProviderChange" :disabled="!!testing || fetchingModels">
+              <el-select v-model="form.llm.provider" filterable allow-create :placeholder="t('setup.llm.providerPlaceholder')" @change="onProviderChange" :disabled="!!testing">
                 <el-option v-for="p in providers" :key="p.name" :label="p.display_name" :value="p.name" />
               </el-select>
             </el-form-item>
             <el-form-item :label="t('setup.llm.apiKey')">
-              <el-input v-model="form.llm.api_key" :placeholder="t('setup.llm.apiKeyPlaceholder')" show-password :disabled="!!testing || fetchingModels" />
+              <el-input v-model="form.llm.api_key" :placeholder="t('setup.llm.apiKeyPlaceholder')" show-password :disabled="!!testing" />
             </el-form-item>
             <el-form-item :label="t('setup.llm.apiBase')">
-              <el-input v-model="form.llm.api_base" :placeholder="t('setup.llm.apiBasePlaceholder')" :disabled="!!testing || fetchingModels" />
+              <el-input v-model="form.llm.api_base" :placeholder="t('setup.llm.apiBasePlaceholder')" :disabled="!!testing" />
             </el-form-item>
-            <el-form-item :label="t('setup.llm.chatModel')">
-              <div class="model-input-row">
-                <el-select v-model="form.llm.model" filterable allow-create :placeholder="t('setup.llm.modelPlaceholder')" class="model-select" :disabled="!!testing || fetchingModels">
-                  <el-option v-for="m in chatModels" :key="m.id" :label="m.name" :value="m.id" />
-                </el-select>
-                <el-button type="primary" plain :loading="fetchingModels" @click="fetchRemoteModels" :disabled="!form.llm.api_key || !form.llm.api_base || !!testing">
-                  {{ t('common.btn.fetchModels') }}
-                </el-button>
-              </div>
+            <el-form-item v-if="currentProvider.supports_chat !== false" :label="t('setup.llm.chatModel')">
+              <el-input v-model="form.llm.model" :placeholder="t('setup.llm.modelPlaceholder')" :disabled="!!testing" />
             </el-form-item>
-            <el-form-item :label="t('setup.llm.embeddingModel')">
-              <div class="model-input-row">
-                <el-select v-model="form.llm.embedding_model" filterable allow-create :placeholder="t('setup.llm.modelPlaceholder')" class="model-select" :disabled="!!testing || fetchingModels">
-                  <el-option v-for="m in embeddingModels" :key="m.id" :label="m.name" :value="m.id" />
-                </el-select>
-                <el-button type="primary" plain :loading="fetchingModels" @click="fetchRemoteModels" :disabled="!form.llm.api_key || !form.llm.api_base || !!testing">
-                  {{ t('common.btn.fetchModels') }}
-                </el-button>
-              </div>
-            </el-form-item>
-            <el-form-item :label="t('setup.llm.embeddingDim')">
-              <el-input v-model="form.llm.embedding_dim" :placeholder="t('setup.llm.embeddingDimPlaceholder')" :disabled="!!testing || fetchingModels" />
-            </el-form-item>
+            <template v-if="currentProvider.supports_embedding !== false">
+              <el-form-item :label="t('setup.llm.embeddingModel')">
+                <el-input v-model="form.llm.embedding_model" :placeholder="t('setup.llm.embeddingModelPlaceholder')" :disabled="!!testing" />
+              </el-form-item>
+              <el-form-item :label="t('setup.llm.embeddingDim')">
+                <el-input v-model="form.llm.embedding_dim" :placeholder="t('setup.llm.embeddingDimPlaceholder')" :disabled="!!testing" />
+              </el-form-item>
+            </template>
             <el-button type="primary" :loading="testing === 'llm'" @click="testConnection('llm')">
               <el-icon><Connection /></el-icon> {{ t('setup.llm.testBtn') }}
             </el-button>
@@ -176,9 +164,9 @@
               <span class="json-title">{{ t('setup.llm.jsonConfig') }}</span>
               <el-button text size="small" @click="syncJsonFromForm">{{ t('common.btn.syncFromForm') }}</el-button>
             </div>
-            <el-input v-model="llmJson" type="textarea" :rows="8" class="json-editor" :disabled="!!testing || fetchingModels" />
+            <el-input v-model="llmJson" type="textarea" :rows="8" class="json-editor" :disabled="!!testing" />
             <p class="json-hint">{{ t('setup.llm.jsonHint') }}</p>
-            <el-button size="small" @click="syncFormFromJson" :disabled="!!testing || fetchingModels">{{ t('common.btn.syncFromJson') }}</el-button>
+            <el-button size="small" @click="syncFormFromJson" :disabled="!!testing">{{ t('common.btn.syncFromJson') }}</el-button>
           </div>
 
           <el-divider />
@@ -237,7 +225,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getLLMProviders, getProviderDefaultConfig, testConnection as testApi,
-  initSystem, fetchModelsFromAPI,
+  initSystem,
 } from '@/api/system'
 import { useUserStore } from '@/stores/user'
 
@@ -246,9 +234,8 @@ const userStore = useUserStore()
 const { t } = useI18n()
 const currentStep = ref(0)
 const submitting = ref(false)
-const fetchingModels = ref(false)
+const testing = ref(null)
 const providers = ref([])
-const allModels = ref([])
 const adminPassword = ref('')
 const adminPasswordConfirm = ref('')
 const passwordError = ref('')
@@ -257,7 +244,7 @@ const confirmError = ref('')
 const form = reactive({
   database: { host: 'localhost', port: '5432', user: 'knowledge', password: 'knowledge123', name: 'knowledge' },
   redis: { host: 'localhost', port: '6379', password: '', db: '0' },
-  milvus: { host: 'localhost', port: '19530', collection: 'knowledge_vectors' },
+  milvus: { host: 'localhost', port: '9091', collection: 'knowledge_vectors' },
   keycloak: { server_url: 'http://localhost:8080', realm: 'knowledge-platform', client_id: 'knowledge-backend', client_secret: '' },
   llm: { provider: 'openai', api_key: '', api_base: '', model: '', embedding_model: '', embedding_dim: '1536' },
   security: { cors_origins: '["http://localhost:5173"]', jwt_algorithm: 'RS256' },
@@ -266,8 +253,6 @@ const form = reactive({
 
 const llmJson = ref('')
 
-const chatModels = computed(() => allModels.value.filter(m => m.type === 'chat'))
-const embeddingModels = computed(() => allModels.value.filter(m => m.type === 'embedding'))
 const currentProvider = computed(() => providers.value.find(p => p.name === form.llm.provider) || {})
 const currentProviderGuide = computed(() => {
   const p = currentProvider.value
@@ -314,30 +299,17 @@ async function onProviderChange(name) {
     form.llm.model = defaults.model || ''
     form.llm.embedding_model = defaults.embedding_model || ''
     form.llm.embedding_dim = defaults.embedding_dim || '1536'
-    allModels.value = []
-  } catch { allModels.value = [] }
-}
-
-async function fetchRemoteModels() {
-  if (!form.llm.api_key || !form.llm.api_base) {
-    ElMessage.warning(t('setup.llm.fetchWarning'))
-    return
-  }
-  fetchingModels.value = true
-  try {
-    const result = await fetchModelsFromAPI(form.llm.provider, form.llm.api_key, form.llm.api_base)
-    allModels.value = result.models || []
-    ElMessage.success(t('setup.llm.fetchSuccess', { total: result.total }))
-  } catch { ElMessage.error(t('common.msg.fetchFailed')) }
-  finally { fetchingModels.value = false }
+  } catch {}
 }
 
 async function testConnection(type) {
+  testing.value = type
   try {
     const configs = type === 'llm' ? { ...form.llm } : { ...form[type] }
     const result = await testApi(type, configs)
     result.success ? ElMessage.success(result.message) : ElMessage.error(result.message)
   } catch { ElMessage.error(t('common.msg.testFailed')) }
+  finally { testing.value = null }
 }
 
 function nextStep() { currentStep.value++ }
@@ -361,12 +333,10 @@ async function handleInit() {
     await initSystem({ ...form, admin_password: adminPassword.value })
     ElMessage.success(t('setup.init.successMsg'))
     userStore.logout()
-    setTimeout(() => {
-      ElMessageBox.alert(t('setup.init.successNote'), t('setup.init.successTitle'), {
-        confirmButtonText: t('common.btn.goLogin'),
-        callback: () => router.push('/login'),
-      })
-    }, 2000)
+    await ElMessageBox.alert(t('setup.init.successNote'), t('setup.init.successTitle'), {
+      confirmButtonText: t('common.btn.goLogin'),
+    })
+    router.push('/login')
   } catch { ElMessage.error(t('setup.init.failedMsg')) }
   finally { submitting.value = false }
 }
@@ -391,8 +361,6 @@ async function handleInit() {
 .guide-content a { color: var(--color-primary); text-decoration: none; }
 .guide-content a:hover { text-decoration: underline; }
 .code-inline { background: #1e1e2e; color: #cdd6f4; padding: 8px 12px; border-radius: var(--radius-md); font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; margin: 6px 0; overflow-x: auto; }
-.model-input-row { display: flex; gap: 8px; width: 100%; }
-.model-select { flex: 1; }
 .step-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 .el-select { width: 100%; }
 

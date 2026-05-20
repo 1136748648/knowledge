@@ -1,10 +1,8 @@
 import logging
-import os
-import threading
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
@@ -45,30 +43,10 @@ PROVIDER_GUIDES = {
         "install": "pip install openai",
         "note": "需要在 platform.openai.com 获取 API Key",
     },
-    "anthropic": {
-        "website": "https://console.anthropic.com",
-        "install": "pip install anthropic",
-        "note": "需要在 console.anthropic.com 获取 API Key",
-    },
     "zhipu": {
         "website": "https://open.bigmodel.cn",
         "install": "pip install openai  (兼容 OpenAI 接口)",
         "note": "智谱开放平台注册后获取 API Key",
-    },
-    "qwen": {
-        "website": "https://dashscope.console.aliyun.com",
-        "install": "pip install openai  (兼容 OpenAI 接口)",
-        "note": "阿里云 DashScope 开通后获取 API Key",
-    },
-    "wenxin": {
-        "website": "https://console.bce.baidu.com/qianfan",
-        "install": "pip install requests",
-        "note": "百度智能云千帆平台创建应用获取 API Key",
-    },
-    "moonshot": {
-        "website": "https://platform.moonshot.cn",
-        "install": "pip install openai  (兼容 OpenAI 接口)",
-        "note": "月之暗面开放平台注册后获取 API Key",
     },
     "deepseek": {
         "website": "https://platform.deepseek.com",
@@ -280,12 +258,13 @@ def _assemble_redis_url(redis: dict[str, str]) -> str:
 
 @router.post("/test/database", response_model=TestResult)
 async def test_database_connection(data: TestConnectionRequest):
-    import sqlalchemy
+    from sqlalchemy.ext.asyncio import create_async_engine
     url = data.configs.get("url") or _assemble_db_url(data.configs)
     try:
-        engine = sqlalchemy.create_engine(url.replace("+asyncpg", "+psycopg2"))
-        with engine.connect() as conn:
-            conn.execute(sqlalchemy.text("SELECT 1"))
+        engine = create_async_engine(url, pool_pre_ping=True)
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        await engine.dispose()
         return TestResult(success=True, message="Database connection successful")
     except Exception as e:
         return TestResult(success=False, message=f"Connection failed: {str(e)}")
@@ -307,10 +286,10 @@ async def test_redis_connection(data: TestConnectionRequest):
 async def test_milvus_connection(data: TestConnectionRequest):
     import httpx
     host = data.configs.get("host", "localhost")
-    rest_port = 19531
+    port = data.configs.get("port", "9091")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(f"http://{host}:{rest_port}/v1/vector/collections")
+            resp = await client.get(f"http://{host}:{port}/healthz")
             resp.raise_for_status()
         return TestResult(success=True, message="Milvus connection successful")
     except Exception as e:
@@ -418,14 +397,6 @@ async def _seed_admin(password: str, db: AsyncSession):
     logger.info("Admin user seeded")
 
 
-def _restart_backend():
-    """延迟重启后端服务"""
-    import time
-    time.sleep(1)
-    logger.info("Restarting backend...")
-    os._exit(0)
-
-
 @router.post("/init")
 async def initialize_system(data: InitRequest, db: AsyncSession = Depends(get_db)):
     """系统初始化：写配置 → 建表 → 建管理员 → 重启"""
@@ -471,11 +442,13 @@ async def initialize_system(data: InitRequest, db: AsyncSession = Depends(get_db
     main_module.SYSTEM_INITIALIZED = True
     logger.info("System initialized successfully")
 
-    # Step 4: 延迟重启（响应发送后再执行）
-    threading.Thread(target=_restart_backend, daemon=True).start()
+    # Step 4: 重新加载配置和数据库引擎（无需重启）
+    from app.db.session import recreate_engine
+    await recreate_engine()
+    logger.info("Engine recreated with new configuration")
 
     return {
         "message": "System initialized successfully",
-        "restart": True,
-        "note": "后端将在 1 秒后自动重启，请等待几秒后刷新页面",
+        "restart": False,
+        "note": "系统初始化完成，可以直接登录",
     }

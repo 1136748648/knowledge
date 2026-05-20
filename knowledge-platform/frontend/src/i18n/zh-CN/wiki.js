@@ -18,8 +18,15 @@ export default {
     sensitivityLabel: '敏感度',
     contentLabel: '内容',
     contentPlaceholder: 'Markdown 格式内容',
+    preview: '预览',
     required: '请填写必填项',
     success: '文档创建成功',
     failed: '创建失败',
+  },
+  edit: {
+    success: '文档已更新',
+  },
+  delete: {
+    confirm: '确定删除该文档？删除后不可恢复。',
   },
 }

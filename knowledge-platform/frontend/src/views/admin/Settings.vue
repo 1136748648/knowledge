@@ -12,12 +12,7 @@
           <el-form label-position="top" class="settings-form">
             <el-form-item :label="t('settings.llm.provider')">
               <el-select v-model="llmForm.provider" filterable allow-create :placeholder="t('settings.llm.providerPlaceholder')" @change="onProviderChange" :disabled="!!saving || !!testing">
-                <el-option v-for="p in providers" :key="p.name" :label="p.display_name" :value="p.name">
-                  <div class="provider-option">
-                    <span>{{ p.display_name }}</span>
-                    <el-tag v-if="p.supports_embedding" size="small" type="success">{{ t('settings.llm.supportsEmbedding') }}</el-tag>
-                  </div>
-                </el-option>
+                <el-option v-for="p in providers" :key="p.name" :label="p.display_name" :value="p.name" />
               </el-select>
             </el-form-item>
             <el-form-item :label="t('settings.llm.apiKey')">
@@ -26,29 +21,17 @@
             <el-form-item :label="t('settings.llm.apiBase')">
               <el-input v-model="llmForm.api_base" :disabled="!!saving || !!testing" />
             </el-form-item>
-            <el-form-item :label="t('settings.llm.chatModel')">
-              <div class="model-input-row">
-                <el-select v-model="llmForm.model" filterable allow-create :placeholder="t('settings.llm.modelPlaceholder')" class="model-select" :disabled="!!saving || !!testing || fetchingModels">
-                  <el-option v-for="m in chatModels" :key="m.id" :label="m.name" :value="m.id" />
-                </el-select>
-                <el-button type="primary" plain :loading="fetchingModels" @click="fetchRemoteModels" :disabled="!llmForm.api_key || !llmForm.api_base || !!saving || !!testing">
-                  {{ t('common.btn.fetchModels') }}
-                </el-button>
-              </div>
+            <el-form-item v-if="currentProvider.supports_chat !== false" :label="t('settings.llm.chatModel')">
+              <el-input v-model="llmForm.model" :placeholder="t('settings.llm.modelPlaceholder')" :disabled="!!saving || !!testing" />
             </el-form-item>
-            <el-form-item :label="t('settings.llm.embeddingModel')">
-              <div class="model-input-row">
-                <el-select v-model="llmForm.embedding_model" filterable allow-create :placeholder="t('settings.llm.modelPlaceholder')" class="model-select" :disabled="!!saving || !!testing || fetchingModels">
-                  <el-option v-for="m in embeddingModels" :key="m.id" :label="m.name" :value="m.id" />
-                </el-select>
-                <el-button type="primary" plain :loading="fetchingModels" @click="fetchRemoteModels" :disabled="!llmForm.api_key || !llmForm.api_base || !!saving || !!testing">
-                  {{ t('common.btn.fetchModels') }}
-                </el-button>
-              </div>
-            </el-form-item>
-            <el-form-item :label="t('settings.llm.embeddingDim')">
-              <el-input v-model="llmForm.embedding_dim" :disabled="!!saving || !!testing" />
-            </el-form-item>
+            <template v-if="currentProvider.supports_embedding !== false">
+              <el-form-item :label="t('settings.llm.embeddingModel')">
+                <el-input v-model="llmForm.embedding_model" :placeholder="t('settings.llm.embeddingModelPlaceholder')" :disabled="!!saving || !!testing" />
+              </el-form-item>
+              <el-form-item :label="t('settings.llm.embeddingDim')">
+                <el-input v-model="llmForm.embedding_dim" :disabled="!!saving || !!testing" />
+              </el-form-item>
+            </template>
             <el-form-item :label="t('settings.llm.jsonConfig')">
               <el-input v-model="llmJson" type="textarea" :rows="6" class="json-editor" :disabled="!!saving || !!testing" />
               <div class="json-actions">
@@ -206,14 +189,12 @@ import { ElMessage } from 'element-plus'
 const { t } = useI18n()
 import {
   getCategoryConfig, updateCategoryConfig, testConnection,
-  getLLMProviders, getProviderDefaultConfig, fetchModelsFromAPI
+  getLLMProviders, getProviderDefaultConfig,
 } from '@/api/system'
 import request from '@/api/request'
 
 const activeTab = ref('llm')
 const providers = ref([])
-const allModels = ref([])
-const fetchingModels = ref(false)
 const saving = ref(null)
 const testing = ref(null)
 
@@ -225,8 +206,7 @@ const securityForm = reactive({ cors_origins: '', jwt_algorithm: 'RS256' })
 const pwdForm = reactive({ old_password: '', new_password: '', confirm_password: '' })
 const llmJson = ref('{}')
 
-const chatModels = computed(() => allModels.value.filter(m => m.type === 'chat'))
-const embeddingModels = computed(() => allModels.value.filter(m => m.type === 'embedding'))
+const currentProvider = computed(() => providers.value.find(p => p.name === llmForm.provider) || {})
 
 onMounted(async () => {
   providers.value = await getLLMProviders()
@@ -297,19 +277,7 @@ async function onProviderChange(name) {
     if (!llmForm.api_base) llmForm.api_base = defaults.api_base || ''
     if (!llmForm.model) llmForm.model = defaults.model || ''
     if (!llmForm.embedding_model) llmForm.embedding_model = defaults.embedding_model || ''
-    allModels.value = []
-  } catch { allModels.value = [] }
-}
-
-async function fetchRemoteModels() {
-  if (!llmForm.api_key || !llmForm.api_base) { ElMessage.warning(t('setup.llm.fetchWarning')); return }
-  fetchingModels.value = true
-  try {
-    const result = await fetchModelsFromAPI(llmForm.provider, llmForm.api_key, llmForm.api_base)
-    allModels.value = result.models || []
-    ElMessage.success(t('setup.llm.fetchSuccess', { total: result.total }))
-  } catch { ElMessage.error(t('common.msg.fetchFailed')) }
-  finally { fetchingModels.value = false }
+  } catch {}
 }
 
 function assembleDbUrl() {
@@ -376,9 +344,6 @@ async function handleChangePassword() {
 .tab-content { max-width: 600px; padding-top: 16px; }
 .settings-form :deep(.el-form-item) { margin-bottom: 20px; }
 .form-actions { display: flex; gap: 12px; }
-.provider-option { display: flex; align-items: center; justify-content: space-between; width: 100%; }
-.model-input-row { display: flex; gap: 8px; width: 100%; }
-.model-select { flex: 1; }
 .el-select { width: 100%; }
 .json-editor :deep(textarea) { font-family: 'Cascadia Code', monospace; font-size: 13px; }
 .json-actions { margin-top: 6px; display: flex; gap: 8px; }

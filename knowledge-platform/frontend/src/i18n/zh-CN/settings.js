@@ -17,9 +17,9 @@ export default {
     apiBase: 'API Base URL',
     chatModel: '聊天模型',
     embeddingModel: '嵌入模型',
-    modelPlaceholder: '选择或输入',
+    modelPlaceholder: '输入聊天模型名称',
+    embeddingModelPlaceholder: '输入嵌入模型名称',
     embeddingDim: '嵌入维度',
-    supportsEmbedding: '支持嵌入',
     jsonConfig: '配置 JSON',
     jsonActions: {
       syncFromForm: '从表单同步',

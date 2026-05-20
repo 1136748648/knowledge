@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str = "knowledge-platform"
 
     # LLM
+    LLM_PROVIDER: str = "openai"
     LLM_API_BASE: str = "https://api.openai.com/v1"
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "gpt-4"
@@ -51,3 +52,9 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
+
+def reload_settings() -> Settings:
+    """清除缓存并重新加载配置（初始化后调用）"""
+    get_settings.cache_clear()
+    return get_settings()

@@ -11,39 +11,40 @@ from app.core.encryption import encrypt, decrypt
 logger = logging.getLogger(__name__)
 
 # 配置字段定义：每个分类的字段及其元数据
+# env_key: 对应的 .env 变量名（不填则默认 CATEGORY_KEY）
 CONFIG_SCHEMA: dict[str, list[dict]] = {
     "database": [
-        {"key": "url", "type": "string", "description": "PostgreSQL 连接串", "sensitive": False},
+        {"key": "url", "type": "string", "description": "PostgreSQL 连接串", "sensitive": False, "env_key": "DATABASE_URL"},
     ],
     "redis": [
-        {"key": "url", "type": "string", "description": "Redis 连接串", "sensitive": False},
+        {"key": "url", "type": "string", "description": "Redis 连接串", "sensitive": False, "env_key": "REDIS_URL"},
     ],
     "milvus": [
-        {"key": "host", "type": "string", "description": "Milvus 主机地址", "sensitive": False},
-        {"key": "port", "type": "int", "description": "Milvus 端口", "sensitive": False},
-        {"key": "collection", "type": "string", "description": "Milvus Collection 名称", "sensitive": False},
+        {"key": "host", "type": "string", "description": "Milvus 主机地址", "sensitive": False, "env_key": "MILVUS_HOST"},
+        {"key": "port", "type": "int", "description": "Milvus 端口", "sensitive": False, "env_key": "MILVUS_PORT"},
+        {"key": "collection", "type": "string", "description": "Milvus Collection 名称", "sensitive": False, "env_key": "MILVUS_COLLECTION"},
     ],
     "keycloak": [
-        {"key": "server_url", "type": "string", "description": "Keycloak 服务地址", "sensitive": False},
-        {"key": "realm", "type": "string", "description": "Keycloak Realm", "sensitive": False},
-        {"key": "client_id", "type": "string", "description": "Client ID", "sensitive": False},
-        {"key": "client_secret", "type": "password", "description": "Client Secret", "sensitive": True},
+        {"key": "server_url", "type": "string", "description": "Keycloak 服务地址", "sensitive": False, "env_key": "KEYCLOAK_SERVER_URL"},
+        {"key": "realm", "type": "string", "description": "Keycloak Realm", "sensitive": False, "env_key": "KEYCLOAK_REALM"},
+        {"key": "client_id", "type": "string", "description": "Client ID", "sensitive": False, "env_key": "KEYCLOAK_CLIENT_ID"},
+        {"key": "client_secret", "type": "password", "description": "Client Secret", "sensitive": True, "env_key": "KEYCLOAK_CLIENT_SECRET"},
     ],
     "llm": [
-        {"key": "provider", "type": "string", "description": "LLM 提供商", "sensitive": False},
-        {"key": "api_key", "type": "password", "description": "API Key", "sensitive": True},
-        {"key": "api_base", "type": "string", "description": "API Base URL", "sensitive": False},
-        {"key": "model", "type": "string", "description": "聊天模型", "sensitive": False},
-        {"key": "embedding_model", "type": "string", "description": "嵌入模型", "sensitive": False},
-        {"key": "embedding_dim", "type": "int", "description": "嵌入维度", "sensitive": False},
-        {"key": "secret_key", "type": "password", "description": "Secret Key（文心一言等）", "sensitive": True},
+        {"key": "provider", "type": "string", "description": "LLM 提供商", "sensitive": False, "env_key": "LLM_PROVIDER"},
+        {"key": "api_key", "type": "password", "description": "API Key", "sensitive": True, "env_key": "LLM_API_KEY"},
+        {"key": "api_base", "type": "string", "description": "API Base URL", "sensitive": False, "env_key": "LLM_API_BASE"},
+        {"key": "model", "type": "string", "description": "聊天模型", "sensitive": False, "env_key": "LLM_MODEL"},
+        {"key": "embedding_model", "type": "string", "description": "嵌入模型", "sensitive": False, "env_key": "LLM_EMBEDDING_MODEL"},
+        {"key": "embedding_dim", "type": "int", "description": "嵌入维度", "sensitive": False, "env_key": "LLM_EMBEDDING_DIM"},
+        {"key": "secret_key", "type": "password", "description": "Secret Key", "sensitive": True, "env_key": "LLM_SECRET_KEY"},
     ],
     "security": [
-        {"key": "cors_origins", "type": "json", "description": "CORS 允许的来源", "sensitive": False},
-        {"key": "jwt_algorithm", "type": "string", "description": "JWT 算法", "sensitive": False},
+        {"key": "cors_origins", "type": "json", "description": "CORS 允许的来源", "sensitive": False, "env_key": "CORS_ORIGINS"},
+        {"key": "jwt_algorithm", "type": "string", "description": "JWT 算法", "sensitive": False, "env_key": "JWT_ALGORITHM"},
     ],
     "audit": [
-        {"key": "enabled", "type": "bool", "description": "是否启用审计日志", "sensitive": False},
+        {"key": "enabled", "type": "bool", "description": "是否启用审计日志", "sensitive": False, "env_key": "AUDIT_LOG_ENABLED"},
     ],
     "system": [
         {"key": "initialized", "type": "bool", "description": "系统是否已初始化", "sensitive": False},
@@ -64,7 +65,14 @@ class ConfigService:
     async def get(self, category: str, key: str, default: str = None) -> str | None:
         """获取配置值，优先级：环境变量 > 数据库 > 默认值"""
         # 1. 环境变量优先
-        env_key = f"{category.upper()}_{key.upper()}"
+        schema = CONFIG_SCHEMA.get(category, [])
+        env_key = None
+        for field in schema:
+            if field["key"] == key:
+                env_key = field.get("env_key")
+                break
+        if not env_key:
+            env_key = f"{category.upper()}_{key.upper()}"
         env_val = os.environ.get(env_key)
         if env_val is not None:
             return env_val
@@ -89,22 +97,40 @@ class ConfigService:
         return default
 
     async def get_category(self, category: str, mask_sensitive: bool = True) -> dict[str, str]:
-        """获取某分类的所有配置"""
+        """获取某分类的所有配置，优先级：环境变量 > 数据库"""
+        schema = CONFIG_SCHEMA.get(category, [])
+
+        # 1. 从数据库读取
         result = await self.db.execute(
             select(SystemConfig).where(SystemConfig.category == category)
         )
-        rows = result.scalars().all()
+        db_rows = {row.key: row for row in result.scalars().all()}
+
         configs = {}
-        for row in rows:
-            value = row.value
-            if row.is_sensitive and mask_sensitive and value:
-                from app.core.encryption import mask_sensitive as mask
-                try:
-                    decrypted = decrypt(value)
-                    value = mask(decrypted)
-                except Exception:
-                    value = "***"
-            configs[row.key] = value
+        for field in schema:
+            key = field["key"]
+            is_sensitive = field.get("sensitive", False)
+
+            # 环境变量优先
+            env_key = field.get("env_key") or f"{category.upper()}_{key.upper()}"
+            env_val = os.environ.get(env_key)
+            if env_val is not None:
+                configs[key] = env_val
+                continue
+
+            # 数据库
+            row = db_rows.get(key)
+            if row and row.value is not None:
+                value = row.value
+                if is_sensitive and mask_sensitive:
+                    from app.core.encryption import mask_sensitive as mask
+                    try:
+                        decrypted = decrypt(value)
+                        value = mask(decrypted)
+                    except Exception:
+                        value = "***"
+                configs[key] = value
+
         return configs
 
     async def set(self, category: str, key: str, value: str, value_type: str = "string", is_sensitive: bool = False, description: str = None):
@@ -143,8 +169,8 @@ class ConfigService:
         schema_map = {s["key"]: s for s in schema}
 
         for key, value in configs.items():
-            if value == "***":
-                continue  # 跳过未修改的敏感字段
+            if not value or ("***" in value):
+                continue  # 跳过未修改的敏感字段（脱敏值含 ***）
             field_meta = schema_map.get(key, {})
             await self.set(
                 category=category,

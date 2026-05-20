@@ -9,7 +9,6 @@ export default {
     next: 'Next',
     submit: 'Start Initialization',
     fetch: 'Fetch Models',
-    fetchModels: 'Fetch Models',
     saveConfig: 'Save Config',
     changePassword: 'Change Password',
     syncFromForm: 'Sync from Form',
@@ -25,7 +24,6 @@ export default {
     testing: 'Testing connection...',
     creating: 'Creating...',
     deleting: 'Deleting...',
-    fetchingModels: 'Fetching model list...',
     normal: 'Normal',
   },
   action: {
