@@ -1,0 +1,192 @@
+import os
+import logging
+from datetime import datetime
+
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.system_config import SystemConfig
+from app.core.encryption import encrypt, decrypt
+
+logger = logging.getLogger(__name__)
+
+# 配置字段定义：每个分类的字段及其元数据
+CONFIG_SCHEMA: dict[str, list[dict]] = {
+    "database": [
+        {"key": "url", "type": "string", "description": "PostgreSQL 连接串", "sensitive": False},
+    ],
+    "redis": [
+        {"key": "url", "type": "string", "description": "Redis 连接串", "sensitive": False},
+    ],
+    "milvus": [
+        {"key": "host", "type": "string", "description": "Milvus 主机地址", "sensitive": False},
+        {"key": "port", "type": "int", "description": "Milvus 端口", "sensitive": False},
+        {"key": "collection", "type": "string", "description": "Milvus Collection 名称", "sensitive": False},
+    ],
+    "keycloak": [
+        {"key": "server_url", "type": "string", "description": "Keycloak 服务地址", "sensitive": False},
+        {"key": "realm", "type": "string", "description": "Keycloak Realm", "sensitive": False},
+        {"key": "client_id", "type": "string", "description": "Client ID", "sensitive": False},
+        {"key": "client_secret", "type": "password", "description": "Client Secret", "sensitive": True},
+    ],
+    "llm": [
+        {"key": "provider", "type": "string", "description": "LLM 提供商", "sensitive": False},
+        {"key": "api_key", "type": "password", "description": "API Key", "sensitive": True},
+        {"key": "api_base", "type": "string", "description": "API Base URL", "sensitive": False},
+        {"key": "model", "type": "string", "description": "聊天模型", "sensitive": False},
+        {"key": "embedding_model", "type": "string", "description": "嵌入模型", "sensitive": False},
+        {"key": "embedding_dim", "type": "int", "description": "嵌入维度", "sensitive": False},
+        {"key": "secret_key", "type": "password", "description": "Secret Key（文心一言等）", "sensitive": True},
+    ],
+    "security": [
+        {"key": "cors_origins", "type": "json", "description": "CORS 允许的来源", "sensitive": False},
+        {"key": "jwt_algorithm", "type": "string", "description": "JWT 算法", "sensitive": False},
+    ],
+    "audit": [
+        {"key": "enabled", "type": "bool", "description": "是否启用审计日志", "sensitive": False},
+    ],
+    "system": [
+        {"key": "initialized", "type": "bool", "description": "系统是否已初始化", "sensitive": False},
+        {"key": "setup_at", "type": "string", "description": "初始化时间", "sensitive": False},
+    ],
+}
+
+
+class ConfigService:
+    """配置管理服务
+
+    优先级：环境变量 > 数据库 > 代码默认值
+    """
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get(self, category: str, key: str, default: str = None) -> str | None:
+        """获取配置值，优先级：环境变量 > 数据库 > 默认值"""
+        # 1. 环境变量优先
+        env_key = f"{category.upper()}_{key.upper()}"
+        env_val = os.environ.get(env_key)
+        if env_val is not None:
+            return env_val
+
+        # 2. 数据库
+        result = await self.db.execute(
+            select(SystemConfig).where(
+                SystemConfig.category == category,
+                SystemConfig.key == key,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row and row.value is not None:
+            if row.is_sensitive:
+                try:
+                    return decrypt(row.value)
+                except Exception:
+                    return row.value
+            return row.value
+
+        # 3. 默认值
+        return default
+
+    async def get_category(self, category: str, mask_sensitive: bool = True) -> dict[str, str]:
+        """获取某分类的所有配置"""
+        result = await self.db.execute(
+            select(SystemConfig).where(SystemConfig.category == category)
+        )
+        rows = result.scalars().all()
+        configs = {}
+        for row in rows:
+            value = row.value
+            if row.is_sensitive and mask_sensitive and value:
+                from app.core.encryption import mask_sensitive as mask
+                try:
+                    decrypted = decrypt(value)
+                    value = mask(decrypted)
+                except Exception:
+                    value = "***"
+            configs[row.key] = value
+        return configs
+
+    async def set(self, category: str, key: str, value: str, value_type: str = "string", is_sensitive: bool = False, description: str = None):
+        """设置配置值"""
+        if is_sensitive and value and value != "***":
+            value = encrypt(value)
+
+        result = await self.db.execute(
+            select(SystemConfig).where(
+                SystemConfig.category == category,
+                SystemConfig.key == key,
+            )
+        )
+        row = result.scalar_one_or_none()
+
+        if row:
+            row.value = value
+            row.value_type = value_type
+            row.updated_at = datetime.utcnow()
+        else:
+            row = SystemConfig(
+                category=category,
+                key=key,
+                value=value,
+                value_type=value_type,
+                is_sensitive=is_sensitive,
+                description=description,
+            )
+            self.db.add(row)
+
+        await self.db.flush()
+
+    async def set_batch(self, category: str, configs: dict[str, str]):
+        """批量设置某分类的配置"""
+        schema = CONFIG_SCHEMA.get(category, [])
+        schema_map = {s["key"]: s for s in schema}
+
+        for key, value in configs.items():
+            if value == "***":
+                continue  # 跳过未修改的敏感字段
+            field_meta = schema_map.get(key, {})
+            await self.set(
+                category=category,
+                key=key,
+                value=value,
+                value_type=field_meta.get("type", "string"),
+                is_sensitive=field_meta.get("sensitive", False),
+                description=field_meta.get("description", ""),
+            )
+
+    async def get_all_categories(self, mask_sensitive: bool = True) -> dict[str, dict[str, str]]:
+        """获取所有分类的配置"""
+        result = await self.db.execute(select(SystemConfig))
+        rows = result.scalars().all()
+
+        categories: dict[str, dict[str, str]] = {}
+        for row in rows:
+            if row.category not in categories:
+                categories[row.category] = {}
+            value = row.value
+            if row.is_sensitive and mask_sensitive and value:
+                from app.core.encryption import mask_sensitive as mask
+                try:
+                    decrypted = decrypt(value)
+                    value = mask(decrypted)
+                except Exception:
+                    value = "***"
+            categories[row.category][row.key] = value
+        return categories
+
+    async def is_system_initialized(self) -> bool:
+        """检查系统是否已完成初始化"""
+        val = await self.get("system", "initialized", "false")
+        return val.lower() in ("true", "1", "yes")
+
+    async def mark_initialized(self):
+        """标记系统已初始化"""
+        await self.set("system", "initialized", "true", "bool")
+        await self.set("system", "setup_at", datetime.utcnow().isoformat(), "string")
+        await self.db.commit()
+
+    @staticmethod
+    def get_config_schema() -> dict[str, list[dict]]:
+        """获取配置字段定义（用于前端渲染表单）"""
+        return CONFIG_SCHEMA

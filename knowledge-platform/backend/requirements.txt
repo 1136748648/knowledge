@@ -1,0 +1,42 @@
+# Web Framework
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+python-multipart==0.0.9
+
+# Database
+sqlalchemy[asyncio]==2.0.31
+asyncpg==0.29.0
+alembic==1.13.1
+
+# Redis
+redis[hiredis]==5.0.7
+
+# Milvus (REST API, avoids grpcio compatibility issues)
+# pymilvus uses gRPC which doesn't support Python 3.13 yet
+# We use httpx to call Milvus REST API directly
+
+# Authentication
+python-jose[cryptography]==3.3.0
+pydantic-settings==2.3.4
+
+# Permission
+casbin==1.36.2
+casbin-sqlalchemy-adapter==1.0.0
+
+# LLM
+openai==1.35.10
+anthropic==0.34.2
+httpx==0.27.0
+
+# Security
+cryptography==43.0.0
+
+# Utilities
+pyyaml==6.0.1
+jieba==0.42.1
+
+# Testing
+pytest==8.2.2
+pytest-asyncio==0.23.7
+pytest-cov==5.0.0
+httpx==0.27.0

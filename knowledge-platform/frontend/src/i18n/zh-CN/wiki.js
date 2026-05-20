@@ -1,0 +1,25 @@
+export default {
+  title: 'Wiki 文档',
+  subtitle: '企业管理文档与知识库',
+  searchPlaceholder: '搜索文档...',
+  selectHint: '选择或创建一个文档',
+  loadFailed: '加载文档失败',
+  sensitivity: {
+    public: '公开',
+    internal: '内部',
+    confidential: '机密',
+  },
+  create: {
+    title: '新建文档',
+    titleLabel: '标题',
+    titlePlaceholder: '文档标题',
+    slugLabel: 'Slug',
+    slugPlaceholder: 'url-friendly-slug',
+    sensitivityLabel: '敏感度',
+    contentLabel: '内容',
+    contentPlaceholder: 'Markdown 格式内容',
+    required: '请填写必填项',
+    success: '文档创建成功',
+    failed: '创建失败',
+  },
+}
