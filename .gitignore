@@ -46,3 +46,5 @@ milvus_data/
 
 # Keycloak
 keycloak_data/
+/.claude/settings.local.json
+/.traces

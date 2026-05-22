@@ -48,12 +48,16 @@ knowledge-platform/
 │   ├── requirements.txt
 │   └── alembic.ini
 │
-├── frontend/                       # Vue3 + Vite 前端（待开发）
+├── frontend/                       # Vue3 + Vite + Element Plus 前端
 ├── infra/
 │   ├── docker-compose.yml          # PostgreSQL + Milvus + Keycloak + Redis
 │   ├── init-db.sql                 # 数据库初始化脚本（表结构 + 预设数据）
 │   └── keycloak/                   # Keycloak realm 配置
 └── docs/
+    ├── requirements/
+    │   └── requirements-plan.md    # 需求规划与四阶段进度追踪
+    └── architecture/
+        └── project-structure.md    # 项目结构 Wiki（快速索引）
 ```
 
 ## Key Commands
@@ -87,7 +91,7 @@ alembic revision --autogenerate -m "description"
 - **Auth:** Keycloak 24 (OAuth2/OIDC)
 - **Permission:** Casbin (RBAC)
 - **LLM:** OpenAI-compatible API
-- **Frontend:** Vue3 + Vite + Element Plus (planned)
+- **Frontend:** Vue3 + Vite + Element Plus + vue-i18n + marked
 
 ## Architecture
 
@@ -123,6 +127,11 @@ JWT Token → 解析 user_id, roles, dept_id
 - **nav_content_links** — 导航节点与内容关联
 - **casbin_rule** — Casbin 策略持久化
 - **audit_logs** — 操作审计日志
+
+## Documentation
+
+- **需求规划与进度**: `docs/requirements/requirements-plan.md` — 四阶段实现计划，每个模块的完成状态
+- **项目结构 Wiki**: `docs/architecture/project-structure.md` — 完整目录结构、数据流、环境变量参考
 
 ## Key Constraints
 
