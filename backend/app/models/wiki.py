@@ -5,7 +5,7 @@ from sqlalchemy import String, Text, ForeignKey, Index, JSON
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.session import Base
+from app.dal import Base
 
 
 class WikiPage(Base):

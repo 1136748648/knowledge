@@ -4,7 +4,7 @@ from sqlalchemy import String, Boolean, Text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.session import Base
+from app.dal import Base
 
 
 class LocalUser(Base):

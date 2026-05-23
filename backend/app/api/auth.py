@@ -1,6 +1,7 @@
 import logging
 from urllib.parse import urlencode
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -13,7 +14,7 @@ from app.core.security import (
     verify_password,
     verify_keycloak_token,
 )
-from app.db.session import get_db
+from app.dal import get_db, LocalUserRepository
 from app.models.schemas import UserContext
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class UserInfoResponse(BaseModel):
 
 
 @router.post("/token", response_model=TokenResponse)
-async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(data: LoginRequest):
     """
     登录接口：
     - 系统未初始化时 -> 内置管理员直接登录（无需数据库）
@@ -61,10 +62,10 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     try:
         from app.models.local_user import LocalUser
-        result = await db.execute(
-            select(LocalUser).where(LocalUser.username == data.username)
-        )
-        user = result.scalar_one_or_none()
+        
+        adapter = __import__('app.dal', fromlist=['get_adapter']).get_adapter()
+        user_repo = LocalUserRepository(adapter)
+        user = await user_repo.get_by_username(data.username)
 
         if not user or not verify_password(data.password, user.password_hash):
             raise HTTPException(status_code=401, detail="用户名或密码错误")
@@ -110,9 +111,9 @@ class ChangePasswordRequest(BaseModel):
 async def change_password(
     data: ChangePasswordRequest,
     current_user: UserContext = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
 ):
     from app.models.local_user import LocalUser
+    from app.dal import get_adapter
 
     if len(data.new_password) < 6:
         raise HTTPException(status_code=400, detail="新密码至少 6 位")
@@ -120,10 +121,10 @@ async def change_password(
     if current_user.user_id == "builtin-admin":
         raise HTTPException(status_code=400, detail="内置管理员不支持修改密码，请先完成系统初始化")
 
-    result = await db.execute(
-        select(LocalUser).where(LocalUser.id == int(current_user.user_id))
-    )
-    user = result.scalar_one_or_none()
+    adapter = get_adapter()
+    user_repo = LocalUserRepository(adapter)
+    user = await user_repo.get_by_id(int(current_user.user_id))
+    
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
@@ -131,7 +132,7 @@ async def change_password(
         raise HTTPException(status_code=400, detail="原密码错误")
 
     user.password_hash = hash_password(data.new_password)
-    await db.commit()
+    await user_repo.update(user)
     logger.info(f"User {user.username} changed password")
     return {"message": "密码修改成功"}
 
@@ -175,19 +176,18 @@ class KeycloakCallbackRequest(BaseModel):
 
 
 @router.post("/keycloak/callback", response_model=TokenResponse)
-async def keycloak_callback(data: KeycloakCallbackRequest, db: AsyncSession = Depends(get_db)):
+async def keycloak_callback(data: KeycloakCallbackRequest):
     """
     Keycloak OAuth2 回调接口
     用授权码换取 Keycloak token，然后生成本地 token 返回
     """
     from app.config import get_settings
     from app.models.local_user import LocalUser
+    from app.dal import get_adapter
     settings = get_settings()
 
     if not settings.KEYCLOAK_SERVER_URL:
         raise HTTPException(status_code=503, detail="Keycloak 未配置")
-
-    import httpx
 
     token_url = f"{settings.KEYCLOAK_SERVER_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/token"
     redirect_uri = f"{settings.KEYCLOAK_SERVER_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/auth"
@@ -221,10 +221,9 @@ async def keycloak_callback(data: KeycloakCallbackRequest, db: AsyncSession = De
             if not user_context:
                 raise HTTPException(status_code=401, detail="Keycloak token 验证失败")
 
-            result = await db.execute(
-                select(LocalUser).where(LocalUser.username == user_context.username)
-            )
-            local_user = result.scalar_one_or_none()
+            adapter = get_adapter()
+            user_repo = LocalUserRepository(adapter)
+            local_user = await user_repo.get_by_username(user_context.username)
 
             if local_user:
                 user_id = str(local_user.id)

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.dal import get_db
 from app.core.security import get_current_active_user, require_roles
 from app.models.schemas import UserContext, AuditLogResponse, PolicyCreate, RoleAssign
 from app.core.casbin_policy import (
@@ -24,7 +23,6 @@ async def get_audit_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: UserContext = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
 ):
     if "admin" not in current_user.roles:
         raise HTTPException(status_code=403, detail="Admin access required")

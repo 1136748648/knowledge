@@ -1,15 +1,15 @@
 import uuid
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.wiki import WikiPage, WikiPageVersion
+from app.dal import WikiPageRepository, WikiPageVersionRepository, get_adapter
 from app.models.schemas import UserContext, WikiPageCreate, WikiPageUpdate
 from app.core.casbin_policy import check_permission
 
 
 class WikiService:
-    def __init__(self, db: AsyncSession, user: UserContext):
-        self.db = db
+    def __init__(self, user: UserContext):
+        adapter = get_adapter()
+        self.page_repo = WikiPageRepository(adapter)
+        self.version_repo = WikiPageVersionRepository(adapter)
         self.user = user
 
     async def list_pages(
@@ -18,35 +18,33 @@ class WikiService:
         sensitivity: str | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> list[WikiPage]:
+    ):
         if not await check_permission(self.user.roles, "wiki", "read"):
             return []
 
-        query = select(WikiPage)
         if parent_id:
-            query = query.where(WikiPage.parent_id == parent_id)
-        if sensitivity:
-            query = query.where(WikiPage.sensitivity == sensitivity)
-        query = query.where(WikiPage.sensitivity.in_(await self._allowed_sensitivities()))
-        query = query.offset((page - 1) * page_size).limit(page_size)
-        result = await self.db.execute(query)
-        return result.scalars().all()
+            pages = await self.page_repo.list_by_parent(parent_id, page, page_size)
+        elif sensitivity:
+            pages = await self.page_repo.list_by_sensitivity(sensitivity, page, page_size)
+        else:
+            pages = await self.page_repo.get_all()
 
-    async def get_page(self, page_id: uuid.UUID) -> WikiPage | None:
+        return [p for p in pages if await self._can_access(p.sensitivity)]
+
+    async def get_page(self, page_id: uuid.UUID):
         if not await check_permission(self.user.roles, "wiki", "read"):
             return None
 
-        result = await self.db.execute(
-            select(WikiPage).where(WikiPage.id == page_id)
-        )
-        page = result.scalar_one_or_none()
+        page = await self.page_repo.get_by_id(page_id)
         if page and not await self._can_access(page.sensitivity):
             return None
         return page
 
-    async def create_page(self, data: WikiPageCreate) -> WikiPage:
+    async def create_page(self, data: WikiPageCreate):
         if not await check_permission(self.user.roles, "wiki", "write"):
             raise PermissionError("You do not have permission to create wiki pages")
+
+        from app.models.wiki import WikiPage, WikiPageVersion
 
         page = WikiPage(
             title=data.title,
@@ -57,8 +55,7 @@ class WikiService:
             dept_id=data.dept_id,
             created_by=self.user.username,
         )
-        self.db.add(page)
-        await self.db.flush()
+        page = await self.page_repo.create(page)
 
         version = WikiPageVersion(
             page_id=page.id,
@@ -68,28 +65,21 @@ class WikiService:
             edited_by=self.user.username,
             edit_summary="Initial creation",
         )
-        self.db.add(version)
-        await self.db.flush()
+        await self.version_repo.create(version)
         return page
 
-    async def update_page(self, page_id: uuid.UUID, data: WikiPageUpdate) -> WikiPage | None:
+    async def update_page(self, page_id: uuid.UUID, data: WikiPageUpdate):
         if not await check_permission(self.user.roles, "wiki", "write"):
             return None
 
-        result = await self.db.execute(
-            select(WikiPage).where(WikiPage.id == page_id)
-        )
-        page = result.scalar_one_or_none()
+        page = await self.page_repo.get_by_id(page_id)
         if not page:
             return None
 
         if not await self._can_write(page.sensitivity):
             return None
 
-        version_result = await self.db.execute(
-            select(func.max(WikiPageVersion.version)).where(WikiPageVersion.page_id == page_id)
-        )
-        max_version = version_result.scalar() or 0
+        max_version = await self.version_repo.get_max_version(page_id)
 
         if data.title is not None:
             page.title = data.title
@@ -101,6 +91,10 @@ class WikiService:
             page.sensitivity = data.sensitivity
         page.updated_by = self.user.username
 
+        page = await self.page_repo.update(page)
+
+        from app.models.wiki import WikiPageVersion
+
         version = WikiPageVersion(
             page_id=page.id,
             title=page.title,
@@ -109,51 +103,30 @@ class WikiService:
             edited_by=self.user.username,
             edit_summary=data.edit_summary,
         )
-        self.db.add(version)
-        await self.db.flush()
+        await self.version_repo.create(version)
         return page
 
     async def delete_page(self, page_id: uuid.UUID) -> bool:
         if not await check_permission(self.user.roles, "wiki", "delete"):
             return False
 
-        result = await self.db.execute(
-            select(WikiPage).where(WikiPage.id == page_id)
-        )
-        page = result.scalar_one_or_none()
+        page = await self.page_repo.get_by_id(page_id)
         if not page:
             return False
-        await self.db.delete(page)
-        await self.db.flush()
-        return True
+        return await self.page_repo.delete(page_id)
 
-    async def get_versions(self, page_id: uuid.UUID) -> list[WikiPageVersion]:
+    async def get_versions(self, page_id: uuid.UUID):
         if not await check_permission(self.user.roles, "wiki", "read"):
             return []
 
-        result = await self.db.execute(
-            select(WikiPageVersion)
-            .where(WikiPageVersion.page_id == page_id)
-            .order_by(WikiPageVersion.version.desc())
-        )
-        return result.scalars().all()
+        return await self.version_repo.get_by_page_id(page_id)
 
-    async def search(self, query: str, page: int = 1, page_size: int = 20) -> list[WikiPage]:
+    async def search(self, query: str, page: int = 1, page_size: int = 20):
         if not await check_permission(self.user.roles, "wiki", "read"):
             return []
 
-        search_query = (
-            select(WikiPage)
-            .where(
-                func.to_tsvector("simple", WikiPage.title + " " + WikiPage.content)
-                .match(query, postgresql_regconfig="simple")
-            )
-            .where(WikiPage.sensitivity.in_(await self._allowed_sensitivities()))
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
-        result = await self.db.execute(search_query)
-        return result.scalars().all()
+        results = await self.page_repo.search(query, page, page_size)
+        return [p for p in results if await self._can_access(p.sensitivity)]
 
     async def _allowed_sensitivities(self) -> list[str]:
         allowed = ["public"]

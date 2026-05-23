@@ -1,10 +1,21 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
+"""
+旧的数据库会话管理模块 - 已弃用
+
+请使用 `app.dal` 模块代替：
+- `from app.dal import get_db` 代替 `from app.db.session import get_db`
+- `from app.dal import Base` 代替 `from app.db.session import Base`
+
+此文件仅保留用于支持 Alembic 迁移
+"""
+
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import declarative_base
 
 from app.config import get_settings
 
 settings = get_settings()
 
+# 为了兼容 Alembic 迁移，保留这些引用
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
@@ -15,47 +26,4 @@ engine = create_async_engine(
     connect_args={"timeout": 3, "command_timeout": 5},
 )
 
-async_session = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
-
-
-async def recreate_engine():
-    """重新创建数据库引擎（初始化后配置变更时调用）"""
-    global engine, async_session, settings
-    from app.config import reload_settings
-
-    settings = reload_settings()
-    await engine.dispose()
-    engine = create_async_engine(
-        settings.DATABASE_URL,
-        echo=settings.DEBUG,
-        pool_size=5,
-        max_overflow=5,
-        pool_pre_ping=True,
-        pool_timeout=5,
-        connect_args={"timeout": 3, "command_timeout": 5},
-    )
-    async_session = async_sessionmaker(
-        engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-async def get_db() -> AsyncSession:
-    async with async_session() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+Base = declarative_base()

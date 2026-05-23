@@ -6,7 +6,7 @@ from sqlalchemy import String, Text, BigInteger
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY, INET
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.session import Base
+from app.dal import Base
 
 
 class AuditLog(Base):

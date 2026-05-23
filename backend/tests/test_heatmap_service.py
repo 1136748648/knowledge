@@ -1,93 +1,79 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import date
 from app.services.heatmap_service import HeatmapService
 
 
 class TestHeatmapService:
     @pytest.mark.asyncio
     async def test_record_search(self):
-        mock_db = AsyncMock()
-        service = HeatmapService(mock_db)
+        mock_search_repo = AsyncMock()
+        mock_stats_repo = AsyncMock()
         
-        with patch("app.services.heatmap_service.get_redis") as mock_redis:
-            mock_redis_client = AsyncMock()
-            mock_redis.return_value = mock_redis_client
-            
-            await service.record_search(
-                query_text="test query",
-                query_embedding=[0.1, 0.2],
-                user_id="user1",
-                dept_id="dept1",
-                hit_docs=[{"id": "doc1", "score": 0.9}],
-                filter_conditions={},
-                duration_ms=100,
-            )
-            
-            assert mock_db.add.called
-            assert mock_db.commit.called
-            assert mock_redis_client.zincrby.called
+        with patch("app.services.heatmap_service.get_adapter"):
+            with patch("app.services.heatmap_service.SearchEventRepository") as mock_search_repo_class:
+                mock_search_repo_class.return_value = mock_search_repo
+                
+                with patch("app.services.heatmap_service.HeatmapStatsRepository") as mock_stats_repo_class:
+                    mock_stats_repo_class.return_value = mock_stats_repo
+                    
+                    with patch("app.services.heatmap_service.get_redis") as mock_redis:
+                        mock_redis_client = AsyncMock()
+                        mock_redis.return_value = mock_redis_client
+                        
+                        service = HeatmapService()
+                        
+                        await service.record_search_event(
+                            user_id="user1",
+                            query="test query",
+                            dept_id="dept1",
+                        )
+                        
+                        assert mock_search_repo.create.called
+                        assert mock_redis_client.hincrby.called
 
     @pytest.mark.asyncio
-    async def test_get_hot_queries(self):
-        mock_db = AsyncMock()
-        service = HeatmapService(mock_db)
-        
-        with patch("app.services.heatmap_service.get_redis") as mock_redis:
-            mock_redis_client = AsyncMock()
-            mock_redis_client.zrevrange.return_value = [("query1", 10), ("query2", 5)]
-            mock_redis.return_value = mock_redis_client
-            
-            result = await service.get_hot_queries("24h", 10)
-            
-            assert len(result) == 2
-            assert result[0]["query"] == "query1"
-            assert result[0]["count"] == 10
-
-    @pytest.mark.asyncio
-    async def test_get_hot_documents(self):
-        mock_db = AsyncMock()
-        service = HeatmapService(mock_db)
-        
-        with patch("app.services.heatmap_service.get_redis") as mock_redis:
-            mock_redis_client = AsyncMock()
-            mock_redis_client.zrevrange.return_value = [("doc1", 15), ("doc2", 8)]
-            mock_redis.return_value = mock_redis_client
-            
-            result = await service.get_hot_documents("24h", 10)
-            
-            assert len(result) == 2
-            assert result[0]["doc_id"] == "doc1"
-            assert result[0]["hit_count"] == 15
-
-    @pytest.mark.asyncio
-    async def test_get_timeline(self):
-        mock_db = AsyncMock()
-        service = HeatmapService(mock_db)
-        
-        with patch("app.services.heatmap_service.get_redis") as mock_redis:
-            mock_redis_client = AsyncMock()
-            mock_redis_client.get.return_value = "5"
-            mock_redis.return_value = mock_redis_client
-            
-            result = await service.get_timeline("2026-05-23", "hour")
-            
-            assert result["date"] == "2026-05-23"
-            assert result["granularity"] == "hour"
-            assert len(result["data"]) == 24
-
-    @pytest.mark.asyncio
-    async def test_get_navigation_heat(self):
-        mock_db = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.all.return_value = [
-            MagicMock(stat_key="nav1", total_count=150),
-            MagicMock(stat_key="nav2", total_count=80),
+    async def test_get_daily_stats(self):
+        mock_stats_repo = AsyncMock()
+        mock_stats_repo.get_by_type_and_date.return_value = [
+            MagicMock(stat_key="query1", count=10, unique_users=5, avg_duration_ms=100),
+            MagicMock(stat_key="query2", count=5, unique_users=3, avg_duration_ms=150),
         ]
-        mock_db.execute.return_value = mock_result
         
-        service = HeatmapService(mock_db)
-        result = await service.get_navigation_heat()
+        with patch("app.services.heatmap_service.get_adapter"):
+            with patch("app.services.heatmap_service.SearchEventRepository"):
+                with patch("app.services.heatmap_service.HeatmapStatsRepository") as mock_stats_repo_class:
+                    mock_stats_repo_class.return_value = mock_stats_repo
+                    
+                    with patch("app.services.heatmap_service.get_redis"):
+                        service = HeatmapService()
+                        
+                        result = await service.get_daily_stats(date(2024, 1, 1))
+                        
+                        assert len(result) == 2
+                        assert "query1" in result
+                        assert result["query1"]["count"] == 10
+                        assert "query2" in result
+                        assert result["query2"]["count"] == 5
+
+    @pytest.mark.asyncio
+    async def test_aggregate_daily_stats(self):
+        mock_stats_repo = AsyncMock()
+        mock_stats_repo.get_by_type_key_date.return_value = None
         
-        assert len(result) == 2
-        assert result[0]["node_id"] == "nav1"
-        assert result[0]["hot_level"] == "hot"
+        with patch("app.services.heatmap_service.get_adapter"):
+            with patch("app.services.heatmap_service.SearchEventRepository"):
+                with patch("app.services.heatmap_service.HeatmapStatsRepository") as mock_stats_repo_class:
+                    mock_stats_repo_class.return_value = mock_stats_repo
+                    
+                    with patch("app.services.heatmap_service.get_redis") as mock_redis:
+                        mock_redis_client = AsyncMock()
+                        mock_redis_client.hgetall.return_value = {"query1": "10", "query2": "5"}
+                        mock_redis.return_value = mock_redis_client
+                        
+                        service = HeatmapService()
+                        
+                        await service.aggregate_daily_stats()
+                        
+                        assert mock_stats_repo.create.called
+                        assert mock_redis_client.delete.called

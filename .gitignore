@@ -49,3 +49,4 @@ keycloak_data/
 /.claude/settings.local.json
 /.traces
 /.trae
+.worktrees/

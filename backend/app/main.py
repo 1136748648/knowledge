@@ -3,51 +3,46 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select, text
 
 from app.config import get_settings
 from app.core.logging import setup_logging
 from app.core.trace import setup_trace_logging
 from app.middleware import TraceMiddleware
 from app.api import auth, wiki, qa, knowledge, admin, system, heatmap
+from app.dal import get_adapter, LocalUserRepository
 
 settings = get_settings()
 setup_logging(log_dir="logs", level="DEBUG" if settings.DEBUG else "INFO")
 setup_trace_logging(log_dir="logs", level="DEBUG" if settings.DEBUG else "INFO")
 logger = logging.getLogger(__name__)
 
-# ---- 内置管理员（首次启动时使用，无需数据库） ----
 BUILTIN_ADMIN_USER = "builtin-admin"
 BUILTIN_ADMIN_PASS = "admin123"
 
-# 系统是否已完成初始化（有真实管理员账号）
 SYSTEM_INITIALIZED = False
 
 
 async def check_system_initialized():
-    """检查数据库中是否存在管理员账号"""
     global SYSTEM_INITIALIZED
     try:
-        from app.db.session import async_session
-        from app.models.local_user import LocalUser
-
-        async with async_session() as db:
-            result = await db.execute(
-                select(LocalUser).where(LocalUser.roles.any("admin"))
-            )
-            if result.scalar_one_or_none():
+        adapter = get_adapter()
+        user_repo = LocalUserRepository(adapter)
+        
+        users = await user_repo.get_all()
+        for user in users:
+            if "admin" in user.roles:
                 SYSTEM_INITIALIZED = True
                 logger.info("System is initialized (admin user found)")
-            else:
-                SYSTEM_INITIALIZED = False
-                logger.info("System not initialized (no admin user)")
+                return
+        
+        SYSTEM_INITIALIZED = False
+        logger.info("System not initialized (no admin user)")
     except Exception as e:
         SYSTEM_INITIALIZED = False
         logger.info(f"Database not available, system not initialized: {e}")
 
 
 async def init_agents():
-    """初始化并注册所有 Agent - 注册类而不是实例"""
     from app.agents import (
         register_db_agent,
         register_wiki_agent,
@@ -57,7 +52,6 @@ async def init_agents():
         register_mindmap_agent,
     )
     
-    # 注册各个 Agent - 现在不需要用户和 db，因为我们注册的是类
     register_db_agent()
     register_wiki_agent()
     register_vector_agent()
@@ -67,29 +61,26 @@ async def init_agents():
 
 
 async def ensure_default_admin():
-    """数据库可用时，确保默认管理员存在"""
     try:
-        from app.db.session import async_session
+        adapter = get_adapter()
+        user_repo = LocalUserRepository(adapter)
+        
+        existing = await user_repo.get_by_username(BUILTIN_ADMIN_USER)
+        if existing:
+            return
+
         from app.models.local_user import LocalUser
         from app.core.security import hash_password
 
-        async with async_session() as db:
-            result = await db.execute(
-                select(LocalUser).where(LocalUser.username == BUILTIN_ADMIN_USER)
-            )
-            if result.scalar_one_or_none():
-                return
-
-            admin_user = LocalUser(
-                username=BUILTIN_ADMIN_USER,
-                password_hash=hash_password(BUILTIN_ADMIN_PASS),
-                email="admin@local",
-                roles=["admin"],
-                is_active=True,
-            )
-            db.add(admin_user)
-            await db.commit()
-            logger.info("Default admin user created")
+        admin_user = LocalUser(
+            username=BUILTIN_ADMIN_USER,
+            password_hash=hash_password(BUILTIN_ADMIN_PASS),
+            email="admin@local",
+            roles=["admin"],
+            is_active=True,
+        )
+        await user_repo.create(admin_user)
+        logger.info("Default admin user created")
     except Exception as e:
         logger.warning(f"Database not available, skipping admin creation: {e}")
 
@@ -98,11 +89,13 @@ async def ensure_default_admin():
 async def lifespan(app: FastAPI):
     global SYSTEM_INITIALIZED
 
-    # 检查系统初始化状态
+    adapter = get_adapter()
+    await adapter.connect()
+    logger.info("Database adapter connected")
+
     await check_system_initialized()
 
     if not SYSTEM_INITIALIZED:
-        # 数据库可用但没有管理员 → 创建默认管理员
         await ensure_default_admin()
         await check_system_initialized()
 
@@ -149,7 +142,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
     try:
         from app.tasks.heatmap_aggregator import stop_scheduler
         stop_scheduler()
@@ -163,6 +155,9 @@ async def lifespan(app: FastAPI):
     from app.core.redis import close_redis
     await close_redis()
 
+    await adapter.disconnect()
+    logger.info("Database adapter disconnected")
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -170,7 +165,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -179,10 +173,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Trace
 app.add_middleware(TraceMiddleware)
 
-# Routes
 app.include_router(auth.router, prefix="/api/auth", tags=["认证"])
 app.include_router(wiki.router, prefix="/api/wiki", tags=["Wiki"])
 app.include_router(qa.router, prefix="/api/qa", tags=["问答"])

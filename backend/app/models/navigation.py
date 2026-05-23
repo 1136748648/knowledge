@@ -5,7 +5,7 @@ from sqlalchemy import String, Text, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.session import Base
+from app.dal import Base
 
 
 class KnowledgeNav(Base):

@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, Text, ARRAY, DateTime, Date, Index
 from sqlalchemy.dialects.postgresql import JSONB
-from app.db.session import Base
+from app.dal import Base
 
 
 class SearchEvent(Base):

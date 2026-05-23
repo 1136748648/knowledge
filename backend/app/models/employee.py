@@ -4,7 +4,7 @@ from datetime import datetime, date
 from sqlalchemy import String, Date, Numeric, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.session import Base
+from app.dal import Base
 
 
 class Employee(Base):
