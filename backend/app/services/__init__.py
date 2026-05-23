@@ -17,6 +17,8 @@ from .knowledge_service import KnowledgeService
 from .heatmap_service import HeatmapService
 from .admin_service import AdminService
 from .qa_service import QAService
+from .storage_service import StorageService
+from .config_service import ConfigService
 
 
 @lru_cache()
@@ -104,6 +106,16 @@ def get_qa_service() -> QAService:
     return QAService()
 
 
+def get_config_service(db) -> ConfigService:
+    return ConfigService(db)
+
+
+def get_storage_service(
+    config_service: ConfigService = Depends(get_config_service),
+) -> StorageService:
+    return StorageService(config_service)
+
+
 __all__ = [
     "WikiService",
     "get_wiki_service",
@@ -125,4 +137,8 @@ __all__ = [
     "get_audit_log_repo",
     "QAService",
     "get_qa_service",
+    "StorageService",
+    "get_storage_service",
+    "ConfigService",
+    "get_config_service",
 ]

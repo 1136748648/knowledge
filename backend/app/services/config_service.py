@@ -50,6 +50,15 @@ CONFIG_SCHEMA: dict[str, list[dict]] = {
         {"key": "initialized", "type": "bool", "description": "系统是否已初始化", "sensitive": False},
         {"key": "setup_at", "type": "string", "description": "初始化时间", "sensitive": False},
     ],
+    "storage": [
+        {"key": "provider", "type": "string", "description": "存储提供商 (minio/s3/oss)", "sensitive": False, "env_key": "STORAGE_PROVIDER"},
+        {"key": "endpoint", "type": "string", "description": "服务端点", "sensitive": False, "env_key": "STORAGE_ENDPOINT"},
+        {"key": "access_key", "type": "string", "description": "访问密钥", "sensitive": True, "env_key": "STORAGE_ACCESS_KEY"},
+        {"key": "secret_key", "type": "password", "description": "秘密密钥", "sensitive": True, "env_key": "STORAGE_SECRET_KEY"},
+        {"key": "bucket", "type": "string", "description": "存储桶名称", "sensitive": False, "env_key": "STORAGE_BUCKET"},
+        {"key": "region", "type": "string", "description": "区域", "sensitive": False, "env_key": "STORAGE_REGION"},
+        {"key": "use_ssl", "type": "bool", "description": "是否使用 SSL", "sensitive": False, "env_key": "STORAGE_USE_SSL"},
+    ],
 }
 
 
