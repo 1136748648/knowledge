@@ -1,9 +1,9 @@
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, List, Optional, Type
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dal.base import Repository
@@ -359,3 +359,133 @@ class HeatmapStatsRepository(ModelRepository):
                 )
             )
             return result.scalar_one_or_none()
+
+
+class WikiFileRepository(ModelRepository):
+    def __init__(self, adapter: PostgreSQLAdapter):
+        from app.models.wiki_storage import WikiFile
+        super().__init__(adapter, WikiFile)
+        self.WikiFile = WikiFile
+
+    async def get_by_page_id(self, page_id: uuid.UUID) -> List[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(
+                select(self.WikiFile)
+                .where(self.WikiFile.page_id == page_id)
+                .order_by(self.WikiFile.version.desc())
+            )
+            return result.scalars().all()
+
+    async def get_current_by_page_id(self, page_id: uuid.UUID) -> Optional[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(
+                select(self.WikiFile).where(
+                    self.WikiFile.page_id == page_id,
+                    self.WikiFile.is_current == True
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def get_max_version(self, page_id: uuid.UUID) -> int:
+        async with await self._get_session() as session:
+            result = await session.execute(
+                select(func.max(self.WikiFile.version)).where(self.WikiFile.page_id == page_id)
+            )
+            return result.scalar() or 0
+
+    async def set_not_current_by_page_id(self, page_id: uuid.UUID):
+        async with await self._get_session() as session:
+            stmt = (
+                self.WikiFile.__table__.update()
+                .where(
+                    self.WikiFile.page_id == page_id,
+                    self.WikiFile.is_current == True
+                )
+                .values(is_current=False)
+            )
+            await session.execute(stmt)
+            await session.commit()
+
+
+class WikiChunkRepository(ModelRepository):
+    def __init__(self, adapter: PostgreSQLAdapter):
+        from app.models.wiki_storage import WikiChunk
+        super().__init__(adapter, WikiChunk)
+        self.WikiChunk = WikiChunk
+
+    async def get_by_file_id(self, file_id: uuid.UUID) -> List[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(
+                select(self.WikiChunk)
+                .where(self.WikiChunk.file_id == file_id)
+                .order_by(self.WikiChunk.chunk_index)
+            )
+            return result.scalars().all()
+
+    async def delete_by_file_id(self, file_id: uuid.UUID):
+        async with await self._get_session() as session:
+            stmt = self.WikiChunk.__table__.delete().where(self.WikiChunk.file_id == file_id)
+            await session.execute(stmt)
+            await session.commit()
+
+
+class WikiTagRepository(ModelRepository):
+    def __init__(self, adapter: PostgreSQLAdapter):
+        from app.models.wiki_storage import WikiTag
+        super().__init__(adapter, WikiTag)
+        self.WikiTag = WikiTag
+
+    async def get_by_name(self, name: str) -> Optional[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(select(self.WikiTag).where(self.WikiTag.name == name))
+            return result.scalar_one_or_none()
+
+    async def get_root_tags(self) -> List[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(
+                select(self.WikiTag)
+                .where(self.WikiTag.parent_id.is_(None))
+                .order_by(self.WikiTag.sort_order)
+            )
+            return result.scalars().all()
+
+    async def get_children(self, parent_id: uuid.UUID) -> List[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(
+                select(self.WikiTag)
+                .where(self.WikiTag.parent_id == parent_id)
+                .order_by(self.WikiTag.sort_order)
+            )
+            return result.scalars().all()
+
+    async def get_all_with_children(self) -> List[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(select(self.WikiTag).order_by(self.WikiTag.sort_order))
+            return result.scalars().all()
+
+
+class ChunkingRuleRepository(ModelRepository):
+    def __init__(self, adapter: PostgreSQLAdapter):
+        from app.models.wiki_storage import ChunkingRule
+        super().__init__(adapter, ChunkingRule)
+        self.ChunkingRule = ChunkingRule
+
+    async def get_active_rules(self) -> List[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(
+                select(self.ChunkingRule)
+                .where(self.ChunkingRule.is_active == True)
+                .order_by(self.ChunkingRule.sort_order)
+            )
+            return result.scalars().all()
+
+    async def update_order(self, rule_orders: List[dict]):
+        async with await self._get_session() as session:
+            for item in rule_orders:
+                stmt = (
+                    self.ChunkingRule.__table__.update()
+                    .where(self.ChunkingRule.id == item["id"])
+                    .values(sort_order=item["sort_order"])
+                )
+                await session.execute(stmt)
+            await session.commit()
