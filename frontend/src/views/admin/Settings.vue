@@ -138,6 +138,43 @@
         </div>
       </el-tab-pane>
 
+      <!-- 对象存储 -->
+      <el-tab-pane :label="t('settings.tabs.storage')" name="storage">
+        <div class="tab-content" v-loading="saving === 'storage' || testing === 'storage'" :element-loading-text="t('common.status.processing')">
+          <el-form label-position="top" class="settings-form">
+            <el-form-item :label="t('settings.storage.provider')">
+              <el-select v-model="storageForm.provider" :disabled="!!saving || !!testing">
+                <el-option v-for="(label, key) in t('settings.storage.providerOptions')" :key="key" :label="label" :value="key" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('settings.storage.endpoint')">
+              <el-input v-model="storageForm.endpoint" :placeholder="t('settings.storage.endpointPlaceholder')" :disabled="!!saving || !!testing" />
+            </el-form-item>
+            <el-form-item :label="t('settings.storage.bucket')">
+              <el-input v-model="storageForm.bucket" :placeholder="t('settings.storage.bucketPlaceholder')" :disabled="!!saving || !!testing" />
+            </el-form-item>
+            <el-form-item :label="t('settings.storage.region')">
+              <el-input v-model="storageForm.region" :placeholder="t('settings.storage.regionPlaceholder')" :disabled="!!saving || !!testing" />
+            </el-form-item>
+            <el-form-item :label="t('settings.storage.accessKey')">
+              <el-input v-model="storageForm.access_key" :placeholder="t('settings.storage.accessKeyPlaceholder')" :disabled="!!saving || !!testing" />
+            </el-form-item>
+            <el-form-item :label="t('settings.storage.secretKey')">
+              <el-input v-model="storageForm.secret_key" type="password" show-password :placeholder="t('settings.storage.secretKeyPlaceholder')" :disabled="!!saving || !!testing" />
+            </el-form-item>
+            <el-form-item>
+              <el-switch v-model="storageForm.use_ssl" :disabled="!!saving || !!testing" />
+            </el-form-item>
+            <el-form-item>
+              <div class="form-actions">
+                <el-button type="primary" :loading="saving === 'storage'" @click="saveCategory('storage', storageForm)">{{ t('common.btn.save') }}</el-button>
+                <el-button :loading="testing === 'storage'" @click="testStorage">{{ t('common.btn.test') }}</el-button>
+              </div>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-tab-pane>
+
       <!-- 安全 -->
       <el-tab-pane :label="t('settings.tabs.security')" name="security">
         <div class="tab-content" v-loading="saving === 'security'" :element-loading-text="t('common.status.saving')">
@@ -191,6 +228,7 @@ import {
   getCategoryConfig, updateCategoryConfig, testConnection,
   getLLMProviders, getProviderDefaultConfig,
 } from '@/api/system'
+import { testStorageConnection } from '@/api/storage'
 import request from '@/api/request'
 
 const activeTab = ref('llm')
@@ -202,6 +240,7 @@ const llmForm = reactive({ provider: '', api_key: '', api_base: '', model: '', e
 const dbForm = reactive({ host: 'localhost', port: '5432', user: 'knowledge', password: '', name: 'knowledge' })
 const redisForm = reactive({ host: '', port: '6379', password: '', db: '0' })
 const milvusForm = reactive({ host: '', port: '', collection: '' })
+const storageForm = reactive({ provider: 'minio', endpoint: '', bucket: 'wiki', region: '', access_key: '', secret_key: '', use_ssl: true })
 const securityForm = reactive({ cors_origins: '', jwt_algorithm: 'RS256' })
 const pwdForm = reactive({ old_password: '', new_password: '', confirm_password: '' })
 const llmJson = ref('{}')
@@ -232,6 +271,9 @@ async function loadConfigs() {
 
     const milvus = await getCategoryConfig('milvus')
     Object.assign(milvusForm, milvus)
+
+    const storage = await getCategoryConfig('storage')
+    Object.assign(storageForm, storage)
 
     const sec = await getCategoryConfig('security')
     Object.assign(securityForm, sec)
@@ -321,6 +363,15 @@ async function testCategory(category, data) {
 }
 
 async function testLLM() { await testCategory('llm', llmForm) }
+
+async function testStorage() {
+  testing.value = 'storage'
+  try {
+    const result = await testStorageConnection(storageForm)
+    result.success ? ElMessage.success(result.message) : ElMessage.error(result.message)
+  } catch { ElMessage.error(t('common.msg.testFailed')) }
+  finally { testing.value = null }
+}
 
 async function handleChangePassword() {
   if (!pwdForm.old_password || !pwdForm.new_password) { ElMessage.warning(t('settings.account.pwdRequired')); return }
