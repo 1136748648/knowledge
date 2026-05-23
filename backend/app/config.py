@@ -13,6 +13,15 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_PASSWORD: str | None = None
+
+    # Heatmap
+    HEATMAP_ENABLED: bool = True
+    HEATMAP_REDIS_TTL: int = 86400
+    HEATMAP_AGGREGATE_INTERVAL: int = 5
 
     # Milvus
     MILVUS_HOST: str = "localhost"
