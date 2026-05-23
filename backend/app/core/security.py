@@ -15,12 +15,9 @@ from app.models.schemas import UserContext
 settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
-# Local auth JWT secret (derived from ENCRYPTION_KEY or fallback)
 LOCAL_JWT_SECRET = settings.ENCRYPTION_KEY or "knowledge-platform-local-secret-key-change-in-production"
 LOCAL_JWT_ALGORITHM = "HS256"
 
-
-# ---- Password Hashing (PBKDF2, no extra deps) ----
 
 def hash_password(password: str) -> str:
     salt = os.urandom(16).hex()
@@ -37,11 +34,8 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-# ---- Local JWT Token ----
-
 def create_local_token(user_id: str, username: str, roles: list[str], dept_id: str | None = None) -> dict:
-    """创建本地 JWT token"""
-    expires_in = 86400  # 24 hours
+    expires_in = 86400
     expire = int(time.time()) + expires_in
     payload = {
         "sub": user_id,
@@ -59,8 +53,6 @@ def create_local_token(user_id: str, username: str, roles: list[str], dept_id: s
         "expires_in": expires_in,
     }
 
-
-# ---- Keycloak Auth ----
 
 class KeycloakPublicKey(BaseModel):
     kid: str
@@ -85,7 +77,6 @@ def _fetch_keycloak_realm_public_keys() -> dict:
 
 
 def _verify_local_token(token: str) -> UserContext | None:
-    """验证本地 JWT token"""
     try:
         payload = jwt.decode(token, LOCAL_JWT_SECRET, algorithms=[LOCAL_JWT_ALGORITHM])
         return UserContext(
@@ -101,7 +92,6 @@ def _verify_local_token(token: str) -> UserContext | None:
 
 
 def _verify_keycloak_token(token: str) -> UserContext | None:
-    """验证 Keycloak JWT token"""
     try:
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get("kid")
@@ -157,20 +147,21 @@ def _verify_keycloak_token(token: str) -> UserContext | None:
         return None
 
 
+def verify_keycloak_token(token: str) -> UserContext | None:
+    return _verify_keycloak_token(token)
+
+
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserContext:
-    """解析 JWT token，依次尝试本地 token 和 Keycloak token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # Try local token first (HS256, iss=knowledge-platform-local)
     user = _verify_local_token(token)
     if user:
         return user
 
-    # Try Keycloak token (RS256)
     user = _verify_keycloak_token(token)
     if user:
         return user

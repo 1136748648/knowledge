@@ -5,6 +5,11 @@ from datetime import datetime
 from pathlib import Path
 
 
+def ensure_log_dir(log_dir: str) -> None:
+    """确保日志目录存在"""
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+
+
 class DailyFileHandler(logging.Handler):
     """每天一个日志文件，文件名格式：yyyyMMdd[_pod].log"""
 
