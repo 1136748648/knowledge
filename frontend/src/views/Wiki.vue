@@ -21,6 +21,27 @@
         <div class="editor-left">
           <div class="editor-label">{{ t('wiki.create.contentLabel') }}</div>
           <textarea v-model="editorForm.content" :placeholder="t('wiki.create.contentPlaceholder')" :disabled="saving" class="md-editor" />
+          <div class="upload-section" style="margin-top: 16px;">
+            <div class="editor-label">{{ t('wiki.uploadFile') }}</div>
+            <el-upload
+              class="upload-demo"
+              action="#"
+              :http-request="handleUpload"
+              :before-upload="beforeUpload"
+              :disabled="saving || uploadProgress > 0"
+              accept=".md,.txt,.pdf,.doc,.docx"
+            >
+              <el-button size="small" :loading="uploadProgress > 0">
+                <el-icon><Upload /></el-icon>
+                {{ uploadProgress > 0 ? `${uploadProgress}%` : t('wiki.uploadBtn') }}
+              </el-button>
+            </el-upload>
+            <div v-if="uploadedFile" class="uploaded-file">
+              <el-icon><FileText /></el-icon>
+              <span>{{ uploadedFile.name }}</span>
+              <el-button text size="small" @click="clearUpload">×</el-button>
+            </div>
+          </div>
         </div>
         <div class="editor-right">
           <div class="editor-label">{{ t('wiki.create.preview') }}</div>
@@ -81,6 +102,27 @@
                 <el-button text type="danger" :loading="deleting" @click="handleDelete">{{ t('common.btn.delete') }}</el-button>
               </div>
             </div>
+            
+            <div v-if="processStatus === 'processing'" class="process-status processing">
+              <el-spinner size="24" />
+              <span>{{ t('wiki.processing') }}</span>
+            </div>
+            
+            <div v-if="processStatus === 'completed'" class="process-status completed">
+              <el-icon :size="24" color="#22c55e"><CheckCircle /></el-icon>
+              <span>{{ t('wiki.processCompleted') }}</span>
+            </div>
+            
+            <div v-if="processStatus === 'failed'" class="process-status failed">
+              <el-icon :size="24" color="#ef4444"><AlertCircle /></el-icon>
+              <span>{{ t('wiki.processFailed') }}</span>
+              <span class="error-message">{{ processError }}</span>
+              <el-button size="small" @click="retryProcess">
+                <el-icon><RefreshCw /></el-icon>
+                {{ t('common.btn.retry') }}
+              </el-button>
+            </div>
+            
             <div class="markdown-body" v-html="renderedContent" />
           </div>
         </div>
@@ -90,11 +132,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Document, Upload, FileText, RefreshCw } from '@element-plus/icons-vue'
 import { marked } from 'marked'
-import { getWikiPages, getWikiPage, createWikiPage, updateWikiPage, deleteWikiPage } from '@/api/wiki'
+import { getWikiPages, getWikiPage, createWikiPage, updateWikiPage, deleteWikiPage, getUploadUrl, uploadFile, processDocument, getProcessStatus } from '@/api/wiki'
 
 const { t } = useI18n()
 
@@ -113,6 +156,12 @@ const editorForm = reactive({
   content: '',
   sensitivity: 'public',
 })
+
+const uploadProgress = ref(0)
+const uploadedFile = ref(null)
+const processStatus = ref(null)
+const processError = ref(null)
+let pollInterval = null
 
 const previewHtml = computed(() => marked(editorForm.content || ''))
 const renderedContent = computed(() => marked(selectedPage.value?.content || ''))
@@ -176,29 +225,113 @@ async function selectNode(data) {
   } finally { loadingPage.value = false }
 }
 
+async function beforeUpload(file) {
+  const allowedTypes = ['.md', '.txt', '.pdf', '.doc', '.docx']
+  const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+  if (!allowedTypes.includes(ext)) {
+    ElMessage.warning(t('wiki.uploadInvalid'))
+    return false
+  }
+  return true
+}
+
+async function handleUpload(params) {
+  const file = params.file
+  uploadProgress.value = 0
+  try {
+    const { url } = await getUploadUrl(file.name)
+    const response = await fetch(url, {
+      method: 'PUT',
+      body: file,
+    })
+    if (response.ok) {
+      uploadProgress.value = 100
+      uploadedFile.value = file
+      ElMessage.success(t('wiki.uploadSuccess'))
+    } else {
+      ElMessage.error(t('wiki.uploadFailed'))
+    }
+  } catch {
+    ElMessage.error(t('wiki.uploadFailed'))
+  } finally {
+    uploadProgress.value = 0
+  }
+}
+
+function clearUpload() {
+  uploadedFile.value = null
+}
+
 async function handleSave() {
-  if (!editorForm.title || !editorForm.slug || !editorForm.content) {
+  if (!editorForm.title || !editorForm.slug) {
     ElMessage.warning(t('wiki.create.required'))
     return
   }
   saving.value = true
   try {
+    let pageId = editorForm.id
     if (editorMode.value === 'create') {
-      await createWikiPage(editorForm)
+      const result = await createWikiPage(editorForm)
+      pageId = result.id
       ElMessage.success(t('wiki.create.success'))
     } else {
       await updateWikiPage(editorForm.id, editorForm)
       ElMessage.success(t('wiki.edit.success'))
     }
+    
+    if (uploadedFile.value) {
+      await processDocument(pageId, uploadedFile.value.name)
+      startPolling(pageId)
+      uploadedFile.value = null
+    }
+    
     editorMode.value = null
     await loadPages()
-    // 刷新当前查看的页面
-    if (editorForm.id) {
-      selectedPage.value = await getWikiPage(editorForm.id)
+    if (pageId) {
+      selectedPage.value = await getWikiPage(pageId)
     }
   } catch (e) {
     ElMessage.error(editorMode.value === 'create' ? t('common.msg.createFailed') : t('common.msg.saveFailed'))
   } finally { saving.value = false }
+}
+
+function startPolling(pageId) {
+  processStatus.value = 'processing'
+  processError.value = null
+  if (pollInterval) clearInterval(pollInterval)
+  pollInterval = setInterval(async () => {
+    try {
+      const status = await getProcessStatus(pageId)
+      processStatus.value = status.status
+      if (status.status === 'completed') {
+        stopPolling()
+        ElMessage.success(t('wiki.processSuccess'))
+      } else if (status.status === 'failed') {
+        stopPolling()
+        processError.value = status.error
+      }
+    } catch {
+      stopPolling()
+    }
+  }, 3000)
+}
+
+function stopPolling() {
+  if (pollInterval) {
+    clearInterval(pollInterval)
+    pollInterval = null
+  }
+}
+
+onUnmounted(() => {
+  stopPolling()
+})
+
+async function retryProcess() {
+  if (selectedPage.value) {
+    await processDocument(selectedPage.value.id, '')
+    startPolling(selectedPage.value.id)
+  }
 }
 
 async function handleDelete() {
@@ -463,5 +596,51 @@ function sensitivityType(s) {
   border: none;
   border-top: 1px solid var(--color-border-light);
   margin: 24px 0;
+}
+
+.upload-section {
+  padding: 12px;
+  border: 1px dashed var(--color-border-light);
+  border-radius: var(--radius-md);
+}
+
+.uploaded-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: var(--radius-sm);
+}
+
+.process-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radius-md);
+}
+
+.process-status.processing {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.process-status.completed {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.process-status.failed {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.process-status .error-message {
+  font-size: var(--font-size-sm);
+  margin-left: auto;
+  margin-right: 12px;
 }
 </style>

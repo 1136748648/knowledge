@@ -29,4 +29,13 @@ export default {
   delete: {
     confirm: '确定删除该文档？删除后不可恢复。',
   },
+  uploadFile: '上传文件',
+  uploadBtn: '点击上传',
+  uploadInvalid: '不支持的文件类型，仅支持 .md, .txt, .pdf, .doc, .docx',
+  uploadSuccess: '文件上传成功',
+  uploadFailed: '文件上传失败',
+  processing: '文档处理中...',
+  processCompleted: '文档处理完成',
+  processFailed: '文档处理失败',
+  processSuccess: '文档处理成功',
 }
