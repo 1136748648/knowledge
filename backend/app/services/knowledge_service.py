@@ -4,7 +4,7 @@ from app.dal import KnowledgeNavRepository, NavContentLinkRepository
 from app.models.schemas import UserContext, NavNodeCreate, NavNodeUpdate
 
 
-class KnowledgeServer:
+class KnowledgeService:
     def __init__(
         self,
         nav_repo: KnowledgeNavRepository,

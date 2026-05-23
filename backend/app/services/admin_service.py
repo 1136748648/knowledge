@@ -11,7 +11,7 @@ from app.dal.repositories import AuditLogRepository
 from app.models.schemas import UserContext
 
 
-class AdminServer:
+class AdminService:
     def __init__(self, audit_log_repo: AuditLogRepository):
         self.audit_log_repo = audit_log_repo
 

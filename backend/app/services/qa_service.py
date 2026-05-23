@@ -2,7 +2,7 @@ from app.agents.router import RouterAgent
 from app.models.schemas import UserContext
 
 
-class QAServer:
+class QAService:
     def __init__(self):
         pass
 

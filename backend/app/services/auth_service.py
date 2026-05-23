@@ -6,7 +6,7 @@ from app.models.schemas import UserContext
 logger = logging.getLogger(__name__)
 
 
-class AuthServer:
+class AuthService:
     def __init__(self, user_repo: LocalUserRepository):
         self.user_repo = user_repo
 

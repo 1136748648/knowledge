@@ -11,7 +11,7 @@ from app.core.security import (
     verify_keycloak_token,
 )
 from app.models.schemas import UserContext
-from app.server import get_auth_server, AuthServer
+from app.services import get_auth_service, AuthService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -59,9 +59,9 @@ async def login(data: LoginRequest):
     try:
         from app.dal import get_adapter
         from app.dal.repositories import LocalUserRepository
-        server = AuthServer(LocalUserRepository(get_adapter()))
+        service = AuthService(LocalUserRepository(get_adapter()))
         
-        result = await server.authenticate(data.username, data.password)
+        result = await service.authenticate(data.username, data.password)
         
         if not result["success"]:
             raise HTTPException(status_code=401, detail=result["error"])
@@ -80,10 +80,10 @@ async def login(data: LoginRequest):
 
 @router.get("/me", response_model=UserInfoResponse)
 async def get_user_info(
-    server: AuthServer = Depends(get_auth_server),
+    service: AuthService = Depends(get_auth_service),
     current_user: UserContext = Depends(get_current_active_user),
 ):
-    result = await server.get_user_info(current_user)
+    result = await service.get_user_info(current_user)
     return UserInfoResponse(**result)
 
 
@@ -100,10 +100,10 @@ class ChangePasswordRequest(BaseModel):
 @router.post("/change-password")
 async def change_password(
     data: ChangePasswordRequest,
-    server: AuthServer = Depends(get_auth_server),
+    service: AuthService = Depends(get_auth_service),
     current_user: UserContext = Depends(get_current_active_user),
 ):
-    result = await server.change_password(current_user.user_id, data.old_password, data.new_password)
+    result = await service.change_password(current_user.user_id, data.old_password, data.new_password)
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
     return {"message": result["message"]}
@@ -193,8 +193,8 @@ async def keycloak_callback(data: KeycloakCallbackRequest):
             if not user_context:
                 raise HTTPException(status_code=401, detail="Keycloak token 验证失败")
 
-            server = AuthServer(LocalUserRepository(get_adapter()))
-            result = await server.keycloak_callback(user_context.username)
+            service = AuthService(LocalUserRepository(get_adapter()))
+            result = await service.keycloak_callback(user_context.username)
 
             logger.info(f"Keycloak login success for user: {user_context.username}")
             return create_local_token(
