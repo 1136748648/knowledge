@@ -101,6 +101,30 @@
         </div>
       </el-col>
     </el-row>
+
+    <!-- 热门推荐入口 -->
+    <div class="heatmap-entry-card" @click="router.push('/heatmap')">
+      <div class="entry-icon">
+        <el-icon :size="32"><TrendCharts /></el-icon>
+      </div>
+      <div class="entry-content">
+        <h3>{{ t('heatmap.dashboardCard.title') }}</h3>
+        <p>{{ t('heatmap.dashboardCard.subtitle') }}</p>
+        <div v-if="topQueries.length > 0" class="entry-tags">
+          <el-tag
+            v-for="(query, index) in topQueries"
+            :key="index"
+            size="small"
+            :type="index === 0 ? 'danger' : index === 1 ? 'warning' : 'info'"
+          >
+            {{ query.query }}
+          </el-tag>
+        </div>
+      </div>
+      <div class="entry-arrow">
+        <el-icon :size="24"><ArrowRight /></el-icon>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -108,6 +132,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { TrendCharts, ArrowRight } from '@element-plus/icons-vue'
+import { heatmapApi } from '@/api/heatmap'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -119,8 +145,15 @@ const stats = ref({
   navCount: 0,
 })
 
-onMounted(() => {
-  // TODO: 从 API 获取统计数据
+const topQueries = ref([])
+
+onMounted(async () => {
+  try {
+    const res = await heatmapApi.getHotQueries('24h', 3)
+    topQueries.value = res.data || []
+  } catch (error) {
+    console.error('Failed to load top queries:', error)
+  }
 })
 </script>
 
@@ -246,5 +279,71 @@ onMounted(() => {
   .quick-actions {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+.heatmap-entry-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-light);
+  padding: 24px;
+  margin-top: 20px;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.heatmap-entry-card:hover {
+  border-color: var(--color-cta);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.entry-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--color-cta) 0%, #F97316 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.entry-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.entry-content h3 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 4px 0;
+}
+
+.entry-content p {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0 0 12px 0;
+}
+
+.entry-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.entry-arrow {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: all var(--transition-base);
+}
+
+.heatmap-entry-card:hover .entry-arrow {
+  color: var(--color-cta);
+  transform: translateX(4px);
 }
 </style>
