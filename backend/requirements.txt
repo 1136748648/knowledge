@@ -11,6 +11,9 @@ alembic==1.13.1
 # Redis
 redis[hiredis]==5.0.7
 
+# Scheduler
+apscheduler==3.10.4
+
 # Milvus (REST API, avoids grpcio compatibility issues)
 # pymilvus uses gRPC which doesn't support Python 3.13 yet
 # We use httpx to call Milvus REST API directly

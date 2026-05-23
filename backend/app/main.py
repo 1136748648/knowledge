@@ -126,6 +126,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to register agents: {e}")
 
+    try:
+        from app.tasks.heatmap_aggregator import start_scheduler
+        start_scheduler()
+        logger.info("Heatmap scheduler started")
+    except Exception as e:
+        logger.warning(f"Failed to start heatmap scheduler: {e}")
+
     print("\n" + "=" * 50)
     print("  Knowledge Platform Backend Started")
     print("=" * 50)
@@ -143,8 +150,18 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    try:
+        from app.tasks.heatmap_aggregator import stop_scheduler
+        stop_scheduler()
+        logger.info("Heatmap scheduler stopped")
+    except Exception as e:
+        logger.warning(f"Failed to stop heatmap scheduler: {e}")
+
     from app.services.cache_service import close_cache
     await close_cache()
+
+    from app.core.redis import close_redis
+    await close_redis()
 
 
 app = FastAPI(
