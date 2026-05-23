@@ -44,6 +44,12 @@ const routes = [
         meta: { requiresAdmin: true },
       },
       {
+        path: 'admin/tags',
+        name: 'TagsManager',
+        component: () => import('@/views/admin/TagsManager.vue'),
+        meta: { requiresAdmin: true },
+      },
+      {
         path: 'trace',
         name: 'Trace',
         component: () => import('@/views/Trace.vue'),

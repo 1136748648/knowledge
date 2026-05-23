@@ -14,6 +14,7 @@ export default {
     syncFromForm: '从表单同步',
     syncFromJson: '从 JSON 同步',
     goLogin: '去登录',
+    retry: '重试',
   },
   status: {
     success: '成功',

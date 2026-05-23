@@ -7,5 +7,6 @@ import knowledge from './knowledge'
 import setup from './setup'
 import settings from './settings'
 import heatmap from './heatmap'
+import tags from './tags'
 
-export default { common, login, dashboard, wiki, qa, knowledge, setup, settings, heatmap }
+export default { common, login, dashboard, wiki, qa, knowledge, setup, settings, heatmap, tags }
