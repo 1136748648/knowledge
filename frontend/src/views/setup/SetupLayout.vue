@@ -11,6 +11,7 @@
         <el-step :title="t('setup.steps.database')" icon="Coin" />
         <el-step :title="t('setup.steps.redis')" icon="Coin" />
         <el-step :title="t('setup.steps.milvus')" icon="Compass" />
+        <el-step :title="t('setup.steps.storage')" icon="Folder" />
         <el-step :title="t('setup.steps.llm')" icon="MagicStick" />
         <el-step :title="t('setup.steps.admin')" icon="User" />
       </el-steps>
@@ -34,7 +35,7 @@
             <el-form-item :label="t('setup.database.name')">
               <el-input v-model="form.database.name" :placeholder="t('setup.database.namePlaceholder')" :disabled="!!testing" />
             </el-form-item>
-            <div class="url-preview">
+            <div class="url-preview" v-if="form.database.host">
               <span class="url-label">{{ t('common.label.connString') }}：</span>
               <code>{{ assembledDbUrl }}</code>
             </div>
@@ -127,8 +128,55 @@
           </el-collapse>
         </div>
 
-        <!-- Step 3: LLM -->
+        <!-- Step 3: Storage -->
         <div v-if="currentStep === 3">
+          <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
+            <template #title>{{ t('setup.storage.infoTitle') }}</template>
+            <template #default>
+              <p>{{ t('setup.storage.infoDesc') }}</p>
+            </template>
+          </el-alert>
+
+          <el-form label-position="top">
+            <el-form-item :label="t('setup.storage.provider')">
+              <el-select v-model="form.storage.provider" :disabled="!!testing">
+                <el-option v-for="(label, key) in t('setup.storage.providers')" :key="key" :label="label" :value="key" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('setup.storage.host')">
+              <el-input v-model="form.storage.host" :placeholder="t('setup.storage.hostPlaceholder')" :disabled="!!testing" />
+            </el-form-item>
+            <el-form-item :label="t('setup.storage.port')">
+              <el-input v-model="form.storage.port" :placeholder="t('setup.storage.portPlaceholder')" :disabled="!!testing" />
+            </el-form-item>
+            <el-form-item :label="t('setup.storage.bucket')">
+              <el-input v-model="form.storage.bucket" :placeholder="t('setup.storage.bucketPlaceholder')" :disabled="!!testing" />
+            </el-form-item>
+            <el-form-item :label="t('setup.storage.accessKey')">
+              <el-input v-model="form.storage.access_key" :placeholder="t('setup.storage.accessKeyPlaceholder')" :disabled="!!testing" />
+            </el-form-item>
+            <el-form-item :label="t('setup.storage.secretKey')">
+              <el-input v-model="form.storage.secret_key" type="password" :placeholder="t('setup.storage.secretKeyPlaceholder')" show-password :disabled="!!testing" />
+            </el-form-item>
+            <el-button type="primary" :loading="testing === 'storage'" @click="testConnection('storage')" :disabled="!form.storage.host">
+              <el-icon><Connection /></el-icon> {{ t('setup.storage.testBtn') }}
+            </el-button>
+          </el-form>
+
+          <el-divider />
+          <el-collapse>
+            <el-collapse-item :title="t('setup.storage.installGuide')" name="storage">
+              <div class="guide-content">
+                <p><strong>{{ t('setup.storage.dockerInstall') }}：</strong></p>
+                <div class="code-inline">docker run -d --name minio -p 9000:9000 -p 9001:9001 minio/minio server /data --console-address ":9001"</div>
+                <p>{{ t('setup.storage.website') }}：<a href="https://min.io" target="_blank">min.io</a></p>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+        </div>
+
+        <!-- Step 4: LLM -->
+        <div v-if="currentStep === 4">
           <el-form label-position="top">
             <el-form-item :label="t('setup.llm.provider')">
               <el-select v-model="form.llm.provider" filterable allow-create :placeholder="t('setup.llm.providerPlaceholder')" @change="onProviderChange" :disabled="!!testing">
@@ -184,8 +232,8 @@
           </div>
         </div>
 
-        <!-- Step 4: 管理员 -->
-        <div v-if="currentStep === 4">
+        <!-- Step 5: 管理员 -->
+        <div v-if="currentStep === 5">
           <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 20px">
             <template #title>{{ t('setup.admin.alertTitle') }}</template>
             <template #default>
@@ -209,8 +257,8 @@
 
       <div class="step-actions">
         <el-button v-if="currentStep > 0" @click="currentStep--">{{ t('common.btn.back') }}</el-button>
-        <el-button v-if="currentStep < 4" type="primary" @click="nextStep">{{ t('common.btn.next') }}</el-button>
-        <el-button v-if="currentStep === 4" type="primary" :loading="submitting" @click="handleInit">
+        <el-button v-if="currentStep < 5" type="primary" @click="nextStep">{{ t('common.btn.next') }}</el-button>
+        <el-button v-if="currentStep === 5" type="primary" :loading="submitting" @click="handleInit">
           {{ t('common.btn.submit') }}
         </el-button>
       </div>
@@ -242,12 +290,13 @@ const passwordError = ref('')
 const confirmError = ref('')
 
 const form = reactive({
-  database: { host: 'localhost', port: '5432', user: 'knowledge', password: 'knowledge123', name: 'knowledge' },
-  redis: { host: 'localhost', port: '6379', password: '', db: '0' },
-  milvus: { host: 'localhost', port: '9091', collection: 'knowledge_vectors' },
-  keycloak: { server_url: 'http://localhost:8080', realm: 'knowledge-platform', client_id: 'knowledge-backend', client_secret: '' },
-  llm: { provider: 'openai', api_key: '', api_base: '', model: '', embedding_model: '', embedding_dim: '1536' },
-  security: { cors_origins: '["http://localhost:5173"]', jwt_algorithm: 'RS256' },
+  database: { host: '', port: '', user: '', password: '', name: '' },
+  redis: { host: '', port: '', password: '', db: '0' },
+  milvus: { host: '', port: '', collection: '' },
+  storage: { provider: 'minio', host: '', port: '', access_key: '', secret_key: '', bucket: '' },
+  llm: { provider: '', api_key: '', api_base: '', model: '', embedding_model: '', embedding_dim: '' },
+  keycloak: { server_url: '', realm: '', client_id: '', client_secret: '' },
+  security: { cors_origins: '', jwt_algorithm: 'RS256' },
   audit: { enabled: 'true' },
 })
 
@@ -262,14 +311,21 @@ const currentProviderGuide = computed(() => {
 
 const assembledDbUrl = computed(() => {
   const d = form.database
-  return `postgresql+asyncpg://${d.user}:${d.password}@${d.host}:${d.port}/${d.name}`
+  if (!d.host) return ''
+  const port = d.port || '5432'
+  const user = d.user || ''
+  const password = d.password ? ':' + d.password : ''
+  const name = d.name || ''
+  return `postgresql://${user}${password}@${d.host}:${port}/${name}`
 })
 
 const assembledRedisUrl = computed(() => {
   const r = form.redis
   if (!r.host) return ''
-  if (r.password) return `redis://:${r.password}@${r.host}:${r.port}/${r.db}`
-  return `redis://${r.host}:${r.port}/${r.db}`
+  const port = r.port || '6379'
+  const db = r.db || '0'
+  if (r.password) return `redis://:${r.password}@${r.host}:${port}/${db}`
+  return `redis://${r.host}:${port}/${db}`
 })
 
 watch(() => ({ ...form.llm }), () => { syncJsonFromForm() }, { deep: true })
@@ -298,7 +354,7 @@ async function onProviderChange(name) {
     form.llm.api_base = defaults.api_base || ''
     form.llm.model = defaults.model || ''
     form.llm.embedding_model = defaults.embedding_model || ''
-    form.llm.embedding_dim = defaults.embedding_dim || '1536'
+    form.llm.embedding_dim = defaults.embedding_dim || ''
   } catch {}
 }
 
@@ -312,6 +368,7 @@ async function testConnection(type) {
         database: t('setup.database.testSuccess'),
         redis: t('setup.redis.testSuccess'),
         milvus: t('setup.milvus.testSuccess'),
+        storage: t('setup.storage.testSuccess'),
         llm: t('setup.llm.testSuccess'),
       }
       ElMessage.success(successMessages[type] || result.message)
