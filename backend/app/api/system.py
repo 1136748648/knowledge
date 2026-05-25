@@ -302,12 +302,22 @@ def _write_env_file(categories: dict[str, dict[str, str]]):
     if db.get("host"):
         lines.append("# DATABASE")
         lines.append(f"DATABASE_URL={_assemble_db_url(db)}")
+        lines.append(f"DATABASE_HOST={db.get('host', 'localhost')}")
+        lines.append(f"DATABASE_PORT={db.get('port', '5432')}")
+        lines.append(f"DATABASE_USER={db.get('user', 'knowledge')}")
+        lines.append(f"DATABASE_PASSWORD={db.get('password', 'knowledge123')}")
+        lines.append(f"DATABASE_NAME={db.get('name', 'knowledge')}")
         lines.append("")
 
     redis_cfg = categories.get("redis", {})
     if redis_cfg.get("host"):
         lines.append("# REDIS")
         lines.append(f"REDIS_URL={_assemble_redis_url(redis_cfg)}")
+        lines.append(f"REDIS_HOST={redis_cfg.get('host', 'localhost')}")
+        lines.append(f"REDIS_PORT={redis_cfg.get('port', '6379')}")
+        lines.append(f"REDIS_DB={redis_cfg.get('db', '0')}")
+        if redis_cfg.get("password"):
+            lines.append(f"REDIS_PASSWORD={redis_cfg.get('password')}")
         lines.append("")
 
     for category, mapping in ENV_MAP.items():

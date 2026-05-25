@@ -52,7 +52,7 @@ class DBAgent:
     def __init__(self, db: AsyncSession, user: UserContext):
         self.db = db
         self.user = user
-        self.db_service = DBService(db, user)
+        self.db_service = DBService(user)
     
     async def handle_request(self, request: MCPRequest) -> MCPResponse:
         """处理 MCP 请求"""
@@ -63,19 +63,20 @@ class DBAgent:
                 employee_id = request.params.get("employee_id")
                 employee = await self.db_service.get_employee_by_id(employee_id)
                 if employee:
+                    emp_data = {
+                        "employee_id": employee.employee_id,
+                        "name": employee.name,
+                        "department": employee.department,
+                        "level": employee.level,
+                        "hire_date": str(employee.hire_date) if employee.hire_date else None,
+                        "manager_id": employee.manager_id,
+                        "email": employee.email,
+                        "status": employee.status,
+                    }
                     return MCPResponse(
                         success=True,
-                        data={
-                            "employee_id": employee.employee_id,
-                            "name": employee.name,
-                            "department": employee.department,
-                            "level": employee.level,
-                            "hire_date": str(employee.hire_date) if employee.hire_date else None,
-                            "manager_id": employee.manager_id,
-                            "email": employee.email,
-                            "status": employee.status
-                        },
-                        sources=[{"type": "database", "table": "employees", "id": employee_id}],
+                        data=emp_data,
+                        sources=[{"type": "employees", "table": "employees", "id": employee_id, "data": emp_data}],
                         confidence=1.0
                     )
                 return MCPResponse(
@@ -88,19 +89,20 @@ class DBAgent:
                 name = request.params.get("employee_name")
                 employee = await self.db_service.get_employee_by_name(name)
                 if employee:
+                    emp_data = {
+                        "employee_id": employee.employee_id,
+                        "name": employee.name,
+                        "department": employee.department,
+                        "level": employee.level,
+                        "hire_date": str(employee.hire_date) if employee.hire_date else None,
+                        "manager_id": employee.manager_id,
+                        "email": employee.email,
+                        "status": employee.status,
+                    }
                     return MCPResponse(
                         success=True,
-                        data={
-                            "employee_id": employee.employee_id,
-                            "name": employee.name,
-                            "department": employee.department,
-                            "level": employee.level,
-                            "hire_date": str(employee.hire_date) if employee.hire_date else None,
-                            "manager_id": employee.manager_id,
-                            "email": employee.email,
-                            "status": employee.status
-                        },
-                        sources=[{"type": "database", "table": "employees", "name": name}],
+                        data=emp_data,
+                        sources=[{"type": "employees", "table": "employees", "name": name, "data": emp_data}],
                         confidence=1.0
                     )
                 return MCPResponse(
@@ -112,26 +114,33 @@ class DBAgent:
             elif action == "get_employees_by_department":
                 department = request.params.get("department")
                 employees = await self.db_service.get_employees_by_department(department)
-                data = [{
-                    "employee_id": emp.employee_id,
-                    "name": emp.name,
-                    "level": emp.level,
-                    "status": emp.status
-                } for emp in employees]
+                emp_list = []
+                source_list = []
+                for emp in employees:
+                    emp_data = {
+                        "employee_id": emp.employee_id,
+                        "name": emp.name,
+                        "level": emp.level,
+                        "status": emp.status,
+                    }
+                    emp_list.append(emp_data)
+                    source_list.append({"type": "employees", "id": emp.employee_id, "data": emp_data})
+                
                 return MCPResponse(
                     success=True,
-                    data=data,
-                    sources=[{"type": "database", "table": "employees", "filter": f"department={department}"}],
+                    data=emp_list,
+                    sources=source_list,
                     confidence=1.0
                 )
             
             elif action == "count_by_department":
                 department = request.params.get("department")
                 count = await self.db_service.count_employees_by_department(department)
+                count_data = {"count": count, "department": department}
                 return MCPResponse(
                     success=True,
-                    data={"count": count, "department": department},
-                    sources=[{"type": "database", "table": "employees", "filter": f"department={department}"}],
+                    data=count_data,
+                    sources=[{"type": "employees", "filter": f"department={department}", "data": count_data}],
                     confidence=1.0
                 )
             
@@ -139,15 +148,16 @@ class DBAgent:
                 employee_id = request.params.get("employee_id")
                 manager = await self.db_service.get_manager(employee_id)
                 if manager:
+                    manager_data = {
+                        "employee_id": manager.employee_id,
+                        "name": manager.name,
+                        "department": manager.department,
+                        "level": manager.level,
+                    }
                     return MCPResponse(
                         success=True,
-                        data={
-                            "employee_id": manager.employee_id,
-                            "name": manager.name,
-                            "department": manager.department,
-                            "level": manager.level
-                        },
-                        sources=[{"type": "database", "table": "employees", "id": manager.employee_id}],
+                        data=manager_data,
+                        sources=[{"type": "employees", "id": manager.employee_id, "data": manager_data}],
                         confidence=1.0
                     )
                 return MCPResponse(

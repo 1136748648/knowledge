@@ -1,5 +1,8 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -10,6 +13,11 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://knowledge:knowledge123@localhost:5432/knowledge"
+    DATABASE_USER: str = "knowledge"
+    DATABASE_PASSWORD: str = "knowledge123"
+    DATABASE_HOST: str = "localhost"
+    DATABASE_PORT: int = 5432
+    DATABASE_NAME: str = "knowledge"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -53,14 +61,32 @@ class Settings(BaseSettings):
     # Audit
     AUDIT_LOG_ENABLED: bool = True
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # Built-in Admin (for initial setup)
+    BUILTIN_ADMIN_USER: str = "builtin-admin"
+    BUILTIN_ADMIN_PASS: str = "admin123"
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+
+def validate_settings(settings: Settings) -> None:
+    """验证必需的环境变量"""
+    errors = []
+    
+    if not settings.ENCRYPTION_KEY:
+        logger.warning("WARNING: ENCRYPTION_KEY is not set. Using default secret for local development only.")
+    
+    if not settings.DATABASE_URL and (not settings.DATABASE_USER or not settings.DATABASE_PASSWORD):
+        errors.append("DATABASE_URL or DATABASE_USER/DATABASE_PASSWORD is required")
+    
+    if errors:
+        raise ValueError("Configuration validation failed:\n" + "\n".join(f"- {e}" for e in errors))
 
 
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    validate_settings(settings)
+    return settings
 
 
 def reload_settings() -> Settings:

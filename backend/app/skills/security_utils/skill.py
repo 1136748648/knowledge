@@ -58,7 +58,7 @@ class SecurityUtilsSkill:
 
         suggestions = []
         if found:
-            suggestions.append(f"检测到 {len(found)} 个敏感词: {', '.join(found)}")
+            suggestions.append(f"检测到 {len(found)} 个敏感词：{', '.join(found)}")
             suggestions.append("建议：请检查内容是否包含敏感信息")
 
         return {
@@ -68,16 +68,31 @@ class SecurityUtilsSkill:
         }
 
     async def mask_sensitive_fields(self, data: Dict[str, Any], resource_type: str = "") -> Dict[str, Any]:
-        """敏感字段脱敏"""
-        fields_to_mask = self.SENSITIVE_FIELDS.get(resource_type, [])
-        fields_to_mask.extend(self.SENSITIVE_FIELDS.get("users", []))
-
-        filtered = data.copy()
-        for field in fields_to_mask:
-            if field in filtered:
-                filtered[field] = "***"
-
-        return filtered
+        """敏感字段脱敏 - 支持嵌套数据结构"""
+        # 确定要脱敏的字段
+        fields_to_mask = set()
+        if resource_type:
+            fields_to_mask.update(self.SENSITIVE_FIELDS.get(resource_type, []))
+        # 始终添加用户相关的敏感字段
+        fields_to_mask.update(self.SENSITIVE_FIELDS.get("users", []))
+        
+        # 递归处理数据
+        return self._mask_data(data, fields_to_mask)
+    
+    def _mask_data(self, data: Any, fields_to_mask: set) -> Any:
+        """递归脱敏数据"""
+        if isinstance(data, dict):
+            masked = {}
+            for key, value in data.items():
+                if key.lower() in [f.lower() for f in fields_to_mask]:
+                    masked[key] = "***"
+                else:
+                    masked[key] = self._mask_data(value, fields_to_mask)
+            return masked
+        elif isinstance(data, list):
+            return [self._mask_data(item, fields_to_mask) for item in data]
+        else:
+            return data
 
 
 async def execute(action: str, params: Dict[str, Any]) -> Dict[str, Any]:

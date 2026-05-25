@@ -69,99 +69,78 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach(async (to, from, next) => {
-  // 跳过登录页本身
-  if (to.path === '/login') {
-    const token = localStorage.getItem('token')
-    if (token) {
-      try {
-        const statusResp = await fetch('/api/system/status')
-        const status = await statusResp.json()
-        if (status.initialized) {
-          next('/')
-        } else {
-          // 系统未初始化 → 检查是否为内置管理员
-          const meResp = await fetch('/api/auth/me', {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-          if (meResp.ok) {
-            const user = await meResp.json()
-            next(user.username === 'builtin-admin' ? '/setup' : '/')
-          } else {
-            localStorage.removeItem('token')
-            next()
-          }
-        }
-      } catch {
-        next('/')
-      }
-      return
-    }
-    next()
-    return
-  }
-
-  // 检查系统初始化状态
-  let initialized = true
+async function checkSystemInitialized() {
   try {
     const resp = await fetch('/api/system/status')
     const data = await resp.json()
-    initialized = data.initialized
+    return data.initialized
   } catch {
-    // API 不可用，继续
+    return true
   }
+}
 
-  // 未初始化且不在 setup 页面 → 去登录
-  if (!initialized && to.path !== '/setup') {
-    const token = localStorage.getItem('token')
-    if (!token) {
-      next('/login')
-      return
+async function checkBuiltinAdmin(token) {
+  try {
+    const resp = await fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (resp.ok) {
+      const user = await resp.json()
+      return user.username === 'builtin-admin'
     }
-    // 有 token → 检查是否为内置管理员
-    try {
-      const meResp = await fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (meResp.ok) {
-        const user = await meResp.json()
-        if (user.username === 'builtin-admin') {
+  } catch {}
+  return false
+}
+
+router.beforeEach(async (to, from, next) => {
+  const token = localStorage.getItem('token')
+
+  if (to.path === '/login') {
+    if (token) {
+      const initialized = await checkSystemInitialized()
+      if (initialized) {
+        next('/')
+      } else {
+        const isBuiltinAdmin = await checkBuiltinAdmin(token)
+        if (isBuiltinAdmin) {
           next('/setup')
-          return
+        } else {
+          localStorage.removeItem('token')
+          next()
         }
       }
-    } catch {}
-    // 非内置管理员 → 回登录页
-    next('/login')
+    } else {
+      next()
+    }
     return
   }
 
-  // 需要登录的页面检查 token
+  const initialized = await checkSystemInitialized()
+
+  if (!initialized && to.path !== '/setup') {
+    if (!token) {
+      next('/login')
+      return
+    }
+    const isBuiltinAdmin = await checkBuiltinAdmin(token)
+    if (isBuiltinAdmin) {
+      next('/setup')
+    } else {
+      next('/login')
+    }
+    return
+  }
+
   if (to.meta.requiresAuth !== false) {
-    const token = localStorage.getItem('token')
     if (!token) {
       next('/login')
       return
     }
 
-    // /setup 页面：仅内置管理员可访问
     if (to.meta.requiresBuiltinAdmin) {
-      try {
-        const resp = await fetch('/api/auth/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (!resp.ok) {
-          localStorage.removeItem('token')
-          next('/login')
-          return
-        }
-        const user = await resp.json()
-        if (user.username !== 'builtin-admin') {
-          next('/')
-          return
-        }
-      } catch {
-        next('/login')
+      const isBuiltinAdmin = await checkBuiltinAdmin(token)
+      if (!isBuiltinAdmin) {
+        next('/')
         return
       }
     }

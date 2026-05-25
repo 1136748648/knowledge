@@ -1,4 +1,5 @@
 import logging
+import re
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcps import AgentCapability, MCPRequest, MCPResponse, create_mcp_client, get_registry
@@ -100,7 +101,7 @@ class OrchestratorAgent:
         elif intent == "HYBRID":
             return await self.handle_hybrid_query(query)
         else:
-            return {"answer": "抱歉，我无法理解您的问题。", "sources": [], "confidence": 0.3}
+            return {"answer": "抱歉，我无法理解您的问题。", "sources": [], "intent": intent, "confidence": 0.3}
 
     async def classify_intent(self, query: str) -> dict:
         """意图分类"""
@@ -121,18 +122,79 @@ class OrchestratorAgent:
             logger.warning(f"LLM classification failed: {e}")
             return {"intent": "BOUNDARY", "confidence": 0.3}
 
-    async def handle_db_query(self, query: str) -> dict:
-        """处理数据库查询"""
-        params = {"action": "search", "query": query}
-        response = await self.mcp_client.call("db_agent", MCPRequest(action="search", params=params))
+    def _extract_name(self, query: str) -> str:
+        """从查询中提取姓名"""
+        name_pattern = r'叫(.+?)[的？?]|找(.+?)[的？?]|(.+?)的信息'
+        match = re.search(name_pattern, query)
+        if match:
+            for group in match.groups():
+                if group and len(group.strip()) >= 2:
+                    return group.strip()
+        return ""
 
-        if response.success and response.data:
-            return {
-                "answer": str(response.data),
-                "sources": response.sources,
-                "confidence": response.confidence
-            }
-        return {"answer": "未找到相关数据。", "sources": [], "confidence": 0.0}
+    def _extract_department(self, query: str) -> str:
+        """从查询中提取部门"""
+        dept_pattern = r'(.+?)部|(.+?)部门|在(.+?)的'
+        match = re.search(dept_pattern, query)
+        if match:
+            for group in match.groups():
+                if group and len(group.strip()) >= 2:
+                    return group.strip() + "部"
+        return ""
+
+    async def handle_db_query(self, query: str) -> dict:
+        """处理数据库查询 - 改进版，能提取查询参数"""
+        # 尝试提取姓名或部门
+        name = self._extract_name(query)
+        department = self._extract_department(query)
+        
+        all_sources = []
+        
+        # 如果有姓名，先按姓名查找
+        if name:
+            params = {"action": "get_employee_by_name", "employee_name": name}
+            response = await self.mcp_client.call("db_agent", MCPRequest(action="get_employee_by_name", params=params))
+            
+            if response.success and response.data:
+                all_sources.extend(response.sources or [])
+                return {
+                    "answer": f"找到员工信息：\n{self._format_employee_data(response.data)}",
+                    "sources": all_sources,
+                    "intent": "PURE_DB",
+                    "confidence": response.confidence
+                }
+        
+        # 如果有部门，查找部门员工
+        if department:
+            params = {"action": "get_employees_by_department", "department": department}
+            response = await self.mcp_client.call("db_agent", MCPRequest(action="get_employees_by_department", params=params))
+            
+            if response.success and response.data:
+                all_sources.extend(response.sources or [])
+                answer = f"{department}的员工列表：\n"
+                for emp in response.data:
+                    answer += f"- {emp.get('name', 'N/A')} ({emp.get('level', 'N/A')})\n"
+                return {
+                    "answer": answer,
+                    "sources": all_sources,
+                    "intent": "PURE_DB",
+                    "confidence": response.confidence
+                }
+        
+        # 默认尝试查找
+        return {"answer": "未找到相关数据，请尝试提供更具体的员工姓名或部门。", "sources": [], "intent": "PURE_DB", "confidence": 0.0}
+
+    def _format_employee_data(self, data: dict) -> str:
+        """格式化员工数据"""
+        if not data:
+            return ""
+        return (
+            f"姓名：{data.get('name', 'N/A')}\n"
+            f"部门：{data.get('department', 'N/A')}\n"
+            f"职位：{data.get('level', 'N/A')}\n"
+            f"邮箱：{data.get('email', 'N/A')}\n"
+            f"状态：{data.get('status', 'N/A')}"
+        )
 
     async def handle_kb_query(self, query: str) -> dict:
         """处理知识库查询"""
@@ -140,12 +202,21 @@ class OrchestratorAgent:
         response = await self.mcp_client.call("wiki_agent", MCPRequest(action="search", params=params))
 
         if response.success and response.data:
+            sources = response.sources or []
+            # 确保 sources 中的数据格式正确
+            formatted_sources = []
+            for source in sources:
+                if isinstance(source, dict) and "data" not in source:
+                    source["data"] = response.data
+                formatted_sources.append(source)
+            
             return {
                 "answer": str(response.data),
-                "sources": response.sources,
+                "sources": formatted_sources,
+                "intent": "PURE_KB",
                 "confidence": response.confidence
             }
-        return {"answer": "未找到相关文档。", "sources": [], "confidence": 0.0}
+        return {"answer": "未找到相关文档。", "sources": [], "intent": "PURE_KB", "confidence": 0.0}
 
     async def handle_hybrid_query(self, query: str) -> dict:
         """处理混合查询"""
@@ -159,6 +230,7 @@ class OrchestratorAgent:
         return {
             "answer": answer,
             "sources": db_result["sources"] + kb_result["sources"],
+            "intent": "HYBRID",
             "confidence": (db_result["confidence"] + kb_result["confidence"]) / 2
         }
 

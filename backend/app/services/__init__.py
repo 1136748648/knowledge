@@ -1,6 +1,7 @@
 from functools import lru_cache
 from fastapi import Depends
-from app.dal import get_adapter
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.dal import get_adapter, get_db
 from app.dal.repositories import (
     WikiPageRepository,
     WikiPageVersionRepository,
@@ -107,7 +108,7 @@ def get_qa_service() -> QAService:
     return QAService()
 
 
-def get_config_service(db) -> ConfigService:
+def get_config_service(db: AsyncSession = Depends(get_db)) -> ConfigService:
     return ConfigService(db)
 
 

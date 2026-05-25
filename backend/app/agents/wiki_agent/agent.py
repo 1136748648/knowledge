@@ -62,7 +62,13 @@ class WikiAgent:
     def __init__(self, db: AsyncSession, user: UserContext):
         self.db = db
         self.user = user
-        self.wiki_service = WikiService(db, user)
+        # 获取 repository 而不是直接传递 db 和 user（保持与现有架构兼容）
+        from app.dal import get_adapter
+        from app.dal.repositories import WikiPageRepository, WikiPageVersionRepository
+        adapter = get_adapter()
+        self.page_repo = WikiPageRepository(adapter)
+        self.version_repo = WikiPageVersionRepository(adapter)
+        self.wiki_service = WikiService(self.page_repo, self.version_repo)
     
     async def handle_request(self, request: MCPRequest) -> MCPResponse:
         """处理 MCP 请求"""
@@ -74,44 +80,50 @@ class WikiAgent:
                 page = request.params.get("page", 1)
                 page_size = request.params.get("page_size", 20)
                 
-                pages = await self.wiki_service.search(query, page, page_size)
-                results = [{
-                    "id": str(page.id),
-                    "title": page.title,
-                    "content": page.content[:200] + "..." if len(page.content) > 200 else page.content,
-                    "slug": page.slug,
-                    "sensitivity": page.sensitivity,
-                    "created_at": str(page.created_at)
-                } for page in pages]
+                pages = await self.wiki_service.search(self.user, query, page, page_size)
+                results = []
+                sources = []
+                for page_item in pages:
+                    page_data = {
+                        "id": str(page_item.id),
+                        "title": page_item.title,
+                        "content": page_item.content[:200] + "..." if len(page_item.content) > 200 else page_item.content,
+                        "slug": page_item.slug,
+                        "sensitivity": page_item.sensitivity,
+                        "created_at": str(page_item.created_at)
+                    }
+                    results.append(page_data)
+                    sources.append({"type": "wiki", "page_id": str(page_item.id), "data": page_data})
                 
                 return MCPResponse(
                     success=True,
                     data={"items": results, "total": len(results)},
-                    sources=[{"type": "wiki", "action": "search", "query": query}],
+                    sources=sources,
                     confidence=0.8
                 )
             
             elif action == "get_page":
                 page_id = request.params.get("page_id")
-                page = await self.wiki_service.get_page(UUID(page_id))
+                page = await self.wiki_service.get_page(self.user, UUID(page_id))
                 
                 if page:
+                    page_data = {
+                        "id": str(page.id),
+                        "title": page.title,
+                        "content": page.content,
+                        "slug": page.slug,
+                        "parent_id": str(page.parent_id) if page.parent_id else None,
+                        "sensitivity": page.sensitivity,
+                        "dept_id": page.dept_id,
+                        "created_by": page.created_by,
+                        "updated_by": page.updated_by,
+                        "created_at": str(page.created_at),
+                        "updated_at": str(page.updated_at)
+                    }
                     return MCPResponse(
                         success=True,
-                        data={
-                            "id": str(page.id),
-                            "title": page.title,
-                            "content": page.content,
-                            "slug": page.slug,
-                            "parent_id": str(page.parent_id) if page.parent_id else None,
-                            "sensitivity": page.sensitivity,
-                            "dept_id": page.dept_id,
-                            "created_by": page.created_by,
-                            "updated_by": page.updated_by,
-                            "created_at": str(page.created_at),
-                            "updated_at": str(page.updated_at)
-                        },
-                        sources=[{"type": "wiki", "page_id": page_id}],
+                        data=page_data,
+                        sources=[{"type": "wiki", "page_id": page_id, "data": page_data}],
                         confidence=1.0
                     )
                 return MCPResponse(
@@ -130,15 +142,16 @@ class WikiAgent:
                     dept_id=request.params.get("dept_id")
                 )
                 
-                page = await self.wiki_service.create_page(data)
+                page = await self.wiki_service.create_page(self.user, data)
+                page_data = {
+                    "id": str(page.id),
+                    "title": page.title,
+                    "slug": page.slug
+                }
                 return MCPResponse(
                     success=True,
-                    data={
-                        "id": str(page.id),
-                        "title": page.title,
-                        "slug": page.slug
-                    },
-                    sources=[{"type": "wiki", "action": "create", "page_id": str(page.id)}],
+                    data=page_data,
+                    sources=[{"type": "wiki", "action": "create", "page_id": str(page.id), "data": page_data}],
                     confidence=1.0
                 )
             
@@ -152,16 +165,17 @@ class WikiAgent:
                     edit_summary=request.params.get("edit_summary")
                 )
                 
-                page = await self.wiki_service.update_page(UUID(page_id), data)
+                page = await self.wiki_service.update_page(self.user, UUID(page_id), data)
                 if page:
+                    page_data = {
+                        "id": str(page.id),
+                        "title": page.title,
+                        "updated_at": str(page.updated_at)
+                    }
                     return MCPResponse(
                         success=True,
-                        data={
-                            "id": str(page.id),
-                            "title": page.title,
-                            "updated_at": str(page.updated_at)
-                        },
-                        sources=[{"type": "wiki", "action": "update", "page_id": page_id}],
+                        data=page_data,
+                        sources=[{"type": "wiki", "action": "update", "page_id": page_id, "data": page_data}],
                         confidence=1.0
                     )
                 return MCPResponse(
@@ -172,12 +186,12 @@ class WikiAgent:
             
             elif action == "delete_page":
                 page_id = request.params.get("page_id")
-                success = await self.wiki_service.delete_page(UUID(page_id))
+                success = await self.wiki_service.delete_page(self.user, UUID(page_id))
                 
                 return MCPResponse(
                     success=success,
                     data={"page_id": page_id},
-                    sources=[{"type": "wiki", "action": "delete", "page_id": page_id}],
+                    sources=[{"type": "wiki", "action": "delete", "page_id": page_id, "data": {"page_id": page_id}}],
                     confidence=1.0 if success else 0.0
                 )
             
@@ -187,30 +201,36 @@ class WikiAgent:
                 parent_id = request.params.get("parent_id")
                 
                 pages = await self.wiki_service.list_pages(
+                    self.user,
                     parent_id=UUID(parent_id) if parent_id else None,
                     page=page,
                     page_size=page_size
                 )
                 
-                results = [{
-                    "id": str(page.id),
-                    "title": page.title,
-                    "slug": page.slug,
-                    "sensitivity": page.sensitivity,
-                    "created_by": page.created_by,
-                    "created_at": str(page.created_at)
-                } for page in pages]
+                results = []
+                sources = []
+                for page_item in pages:
+                    page_data = {
+                        "id": str(page_item.id),
+                        "title": page_item.title,
+                        "slug": page_item.slug,
+                        "sensitivity": page_item.sensitivity,
+                        "created_by": page_item.created_by,
+                        "created_at": str(page_item.created_at)
+                    }
+                    results.append(page_data)
+                    sources.append({"type": "wiki", "page_id": str(page_item.id), "data": page_data})
                 
                 return MCPResponse(
                     success=True,
                     data={"items": results, "total": len(results)},
-                    sources=[{"type": "wiki", "action": "list"}],
+                    sources=sources,
                     confidence=1.0
                 )
             
             elif action == "get_versions":
                 page_id = request.params.get("page_id")
-                versions = await self.wiki_service.get_versions(UUID(page_id))
+                versions = await self.wiki_service.get_versions(self.user, UUID(page_id))
                 
                 results = [{
                     "version": v.version,
@@ -223,7 +243,7 @@ class WikiAgent:
                 return MCPResponse(
                     success=True,
                     data={"items": results, "total": len(results)},
-                    sources=[{"type": "wiki", "action": "versions", "page_id": page_id}],
+                    sources=[{"type": "wiki", "action": "versions", "page_id": page_id, "data": {"items": results}}],
                     confidence=1.0
                 )
             

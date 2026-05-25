@@ -16,8 +16,9 @@ setup_logging(log_dir="logs", level="DEBUG" if settings.DEBUG else "INFO")
 setup_trace_logging(log_dir="logs", level="DEBUG" if settings.DEBUG else "INFO")
 logger = logging.getLogger(__name__)
 
-BUILTIN_ADMIN_USER = "builtin-admin"
-BUILTIN_ADMIN_PASS = "admin123"
+# 从配置中读取内置管理员信息
+BUILTIN_ADMIN_USER = settings.BUILTIN_ADMIN_USER
+BUILTIN_ADMIN_PASS = settings.BUILTIN_ADMIN_PASS
 
 SYSTEM_INITIALIZED = False
 
