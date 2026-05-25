@@ -1,6 +1,6 @@
 """Mermaid Renderer Skill - 思维导图和流程图渲染"""
 
-from .skill import MermaidRendererSkill, execute
+from .skill import MermaidRendererSkill
 
 __all__ = ["MermaidRendererSkill", "execute"]
 

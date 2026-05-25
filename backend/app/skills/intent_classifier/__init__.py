@@ -1,6 +1,6 @@
 """Intent Classifier Skill - 意图分类"""
 
-from .skill import IntentClassifierSkill, execute
+from .skill import IntentClassifierSkill
 
 __all__ = ["IntentClassifierSkill", "execute"]
 
