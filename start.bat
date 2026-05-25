@@ -11,54 +11,45 @@ echo   Knowledge Platform
 echo ========================================
 echo.
 
-:: Check and install Python dependencies
-set "MISSING_DEPS="
-set "FAST_CHECK=fail"
+:: Check and install Python dependencies (with error tolerance)
+echo [1/4] Checking backend dependencies...
 
 python -c "import fastapi" >nul 2>&1
-if errorlevel 1 set "FAST_CHECK=fail"
-
-if "!FAST_CHECK!" == "fail" (
-    echo [1/4] Backend dependencies not found, installing...
-    pip install -r "%BACKEND%\requirements.txt" -q
+if errorlevel 1 (
+    echo   FastAPI not found, installing dependencies...
+    pip install -r "%BACKEND%\requirements.txt"
     if errorlevel 1 (
-        echo ERROR: Failed to install backend dependencies!
-        echo Please run manually: pip install -r "%BACKEND%\requirements.txt"
-        pause
-        exit /b 1
+        echo.
+        echo   [WARNING] Some dependencies installation had issues - proceeding anyway
+        echo   You may need to install Visual C++ Build Tools for some packages
+        echo   Download: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+        echo.
     )
-    echo [1/4] Backend dependencies installed successfully
 ) else (
-    echo [1/4] Checking backend dependencies...
-    
-    :: Detailed check of critical dependencies from requirements.txt
-    set "CRITICAL_DEPS=fastapi uvicorn sqlalchemy redis apscheduler casbin pydantic httpx openai cryptography
-    set "INSTALL_MISSING="
-    
-    for %%D in (!CRITICAL_DEPS!) do (
-        python -c "import %%D" 2>nul
-        if errorlevel 1 (
-            set "INSTALL_MISSING=!INSTALL_MISSING! %%D"
-        )
-    )
-    
-    if defined INSTALL_MISSING (
-        echo   Missing packages:!INSTALL_MISSING!
-        echo   Installing missing packages...
-        pip install !INSTALL_MISSING! -q
-        if errorlevel 1 (
-            echo   WARNING: Some packages failed to install
-        ) else (
-            echo   Missing packages installed
-        )
-    ) else (
-        echo   All critical dependencies verified
-    )
+    echo   FastAPI found
 )
 
-:: Check if apscheduler is available (for heatmap scheduler)
+:: Check critical packages one by one and install missing ones
+echo   Checking individual packages...
+set "CRITICAL_DEPS=fastapi uvicorn sqlalchemy redis apscheduler casbin pydantic httpx openai cryptography casbin_async_sqlalchemy_adapter"
+
+for %%D in (!CRITICAL_DEPS!) do (
+    python -c "import %%D" 2>nul
+    if errorlevel 1 (
+        echo   Missing: %%D
+        echo   Installing: %%D...
+        pip install %%D -q
+        if errorlevel 1 (
+            echo   [WARNING] %%D failed to install
+        )
+    )
+)
+echo   Done.
+
+:: Check if apscheduler is available
 python -c "import apscheduler" 2>nul
 if errorlevel 1 (
+    echo.
     echo [WARNING] apscheduler not installed - heatmap scheduler will be disabled
     echo   Run: pip install apscheduler
 )
@@ -66,6 +57,7 @@ if errorlevel 1 (
 :: Check if casbin-async-sqlalchemy-adapter is available
 python -c "import casbin_async_sqlalchemy_adapter" 2>nul
 if errorlevel 1 (
+    echo.
     echo [WARNING] casbin async adapter not installed - RBAC may not work
     echo   Run: pip install casbin-async-sqlalchemy-adapter
 )
