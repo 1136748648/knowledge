@@ -1,7 +1,6 @@
 import casbin
 import casbin_async_sqlalchemy_adapter
 import logging
-import casbin.policies as policies
 
 from app.config import get_settings
 
