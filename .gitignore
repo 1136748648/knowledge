@@ -50,3 +50,4 @@ keycloak_data/
 /.traces
 /.trae
 .worktrees/
+/.code-structure

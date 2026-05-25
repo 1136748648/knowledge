@@ -1,9 +1,0 @@
-{
-  "version": "v1.0.0",
-  "last_updated": "2026-05-25T13:34:00",
-  "git_enabled": false,
-  "files": [
-    {"path": "infra/init-db.sql", "last_modified": "2026-05-25T13:00:00"},
-    {"path": "infra/init-wiki-storage.sql", "last_modified": "2026-05-25T13:00:00"}
-  ]
-}
