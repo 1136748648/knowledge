@@ -62,12 +62,30 @@ if errorlevel 1 (
     echo   Run: pip install casbin-async-sqlalchemy-adapter
 )
 
-:: Check if node_modules exists
+:: Check if node_modules exists and verify key dependencies
 if not exist "%FRONTEND%\node_modules" (
     echo [2/5] Installing frontend dependencies...
     cd /d "%FRONTEND%" && npm install
 ) else (
-    echo [2/5] Frontend dependencies OK
+    echo [2/5] Checking frontend dependencies...
+    set "FRONTEND_OK=1"
+    
+    :: Check critical frontend packages
+    set "FRONTEND_DEPS=crypto-js axios element-plus vue vue-router vue-i18n pinia"
+    
+    for %%D in (!FRONTEND_DEPS!) do (
+        if not exist "%FRONTEND%\node_modules\%%D" (
+            echo   Missing: %%D
+            set "FRONTEND_OK=0"
+        )
+    )
+    
+    if "!FRONTEND_OK!" == "0" (
+        echo   Reinstalling dependencies...
+        cd /d "%FRONTEND%" && npm install
+    ) else (
+        echo   Frontend dependencies OK
+    )
 )
 
 :: Check if Docker containers are running
