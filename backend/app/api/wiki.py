@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_active_user
-from app.db.session import get_db
+from app.dal import get_db
 from app.models.schemas import (
     UserContext, WikiPageCreate, WikiPageUpdate,
     WikiPageResponse, WikiPageListResponse,
