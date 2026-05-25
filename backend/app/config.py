@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     SIGNATURE_ENABLED: bool = True
     SIGNATURE_SECRET_KEY: str = "knowledge-platform-default-signature-secret-change-in-production"
     SIGNATURE_TIMESTAMP_TOLERANCE: int = 60
-    SIGNATURE_EXCLUDED_PATHS: str = "/api/auth/token,/health,/api/system/status"
+    SIGNATURE_EXCLUDED_PATHS: str = "/api/auth/token,/api/auth/me,/health,/api/system/status"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
