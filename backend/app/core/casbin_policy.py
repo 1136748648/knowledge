@@ -1,13 +1,13 @@
 import casbin
-import casbin_sqlalchemy_adapter
+import casbin_async_sqlalchemy_adapter
 import logging
+import casbin.policies as policies
 
 from app.config import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-# 全局变量替代lru_cache
 _enforcer = None
 _policy_version = 0
 
@@ -54,44 +54,45 @@ DEFAULT_ROLES = [
 ]
 
 
-def get_enforcer(refresh: bool = False) -> casbin.Enforcer:
-    """获取Enforcer实例，支持刷新"""
+async def get_enforcer(refresh: bool = False) -> casbin.AsyncEnforcer:
+    """获取异步 Enforcer 实例，支持刷新"""
     global _enforcer, _policy_version
     
     if refresh or _enforcer is None:
-        adapter = casbin_sqlalchemy_adapter.Adapter(settings.DATABASE_URL)
+        adapter = casbin_async_sqlalchemy_adapter.Adapter(settings.DATABASE_URL)
         model = casbin.model.Model()
         model.load_model_from_text(RBAC_MODEL)
-        _enforcer = casbin.Enforcer(model, adapter)
+        _enforcer = casbin.AsyncEnforcer(model, adapter)
+        await _enforcer.load_policy()
         _policy_version += 1
     
     return _enforcer
 
 
-def _init_default_policies(enforcer: casbin.Enforcer):
+async def _init_default_policies(enforcer: casbin.AsyncEnforcer):
     for policy in DEFAULT_POLICIES:
-        if not enforcer.get_policy().get(policy):
-            enforcer.add_policy(*policy)
+        if not enforcer.enforce(policy[0], policy[1], policy[2]):
+            await enforcer.add_policy(*policy)
     for role in DEFAULT_ROLES:
-        if not enforcer.has_role_for_user(role[0], role[1]):
-            enforcer.add_role_for_user(role[0], role[1])
+        if not await enforcer.has_role_for_user(role[0], role[1]):
+            await enforcer.add_role_for_user(role[0], role[1])
     logger.info("Casbin default policies initialized")
 
 
 async def check_permission(user_roles: list[str], resource: str, action: str) -> bool:
-    enforcer = get_enforcer()
+    enforcer = await get_enforcer()
     for role in user_roles:
-        if enforcer.enforce(role, resource, action):
+        if await enforcer.enforce(role, resource, action):
             return True
     return False
 
 
 async def get_user_permissions(user_roles: list[str]) -> list[dict]:
-    enforcer = get_enforcer()
+    enforcer = await get_enforcer()
     permissions = []
     seen = set()
     for role in user_roles:
-        for p in enforcer.get_permissions_for_user(role):
+        for p in await enforcer.get_permissions_for_user(role):
             key = tuple(p)
             if key not in seen:
                 seen.add(key)
@@ -100,45 +101,45 @@ async def get_user_permissions(user_roles: list[str]) -> list[dict]:
 
 
 async def add_policy(sub: str, obj: str, act: str) -> bool:
-    enforcer = get_enforcer()
-    if not enforcer.enforce(sub, obj, act):
-        result = enforcer.add_policy(sub, obj, act)
+    enforcer = await get_enforcer()
+    if not await enforcer.enforce(sub, obj, act):
+        result = await enforcer.add_policy(sub, obj, act)
         return result
     return True
 
 
 async def remove_policy(sub: str, obj: str, act: str) -> bool:
-    enforcer = get_enforcer()
-    return enforcer.remove_policy(sub, obj, act)
+    enforcer = await get_enforcer()
+    return await enforcer.remove_policy(sub, obj, act)
 
 
 async def add_role_for_user(user: str, role: str) -> bool:
-    enforcer = get_enforcer()
-    if not enforcer.has_role_for_user(user, role):
-        return enforcer.add_role_for_user(user, role)
+    enforcer = await get_enforcer()
+    if not await enforcer.has_role_for_user(user, role):
+        return await enforcer.add_role_for_user(user, role)
     return True
 
 
 async def remove_role_for_user(user: str, role: str) -> bool:
-    enforcer = get_enforcer()
-    return enforcer.delete_role_for_user(user, role)
+    enforcer = await get_enforcer()
+    return await enforcer.delete_role_for_user(user, role)
 
 
 async def get_user_roles(user: str) -> list[str]:
-    enforcer = get_enforcer()
-    return enforcer.get_roles_for_user(user)
+    enforcer = await get_enforcer()
+    return await enforcer.get_roles_for_user(user)
 
 
 async def init_policies():
-    enforcer = get_enforcer()
-    _init_default_policies(enforcer)
+    enforcer = await get_enforcer()
+    await _init_default_policies(enforcer)
 
 
 async def reload_policies() -> dict:
     """重新加载策略"""
     global _enforcer
-    _enforcer = None  # 清空缓存
-    get_enforcer(refresh=True)
+    _enforcer = None
+    await get_enforcer(refresh=True)
     
     logger.info(f"Casbin policies reloaded, version: {_policy_version}")
     

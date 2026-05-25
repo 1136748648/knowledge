@@ -23,7 +23,7 @@ pydantic-settings==2.3.4
 
 # Permission
 casbin==1.36.2
-casbin-sqlalchemy-adapter==1.0.0
+casbin-async-sqlalchemy-adapter==1.17.0
 
 # LLM
 openai==1.35.10
