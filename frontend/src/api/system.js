@@ -1,63 +1,37 @@
 import request from './request'
 
-export async function getSystemStatus() {
-  return await request.get('/system/status')
-}
+// 系统状态
+export const getSystemStatus = () => request.get('/system/status')
 
-export async function getConfigSchema() {
-  return await request.get('/system/config/schema')
-}
+// 配置 Schema
+export const getConfigSchema = () => request.get('/system/config/schema')
 
-export async function getAllConfigs() {
-  return await request.get('/system/config')
-}
+// 配置 CRUD
+export const getAllConfigs = () => request.get('/system/config')
+export const getCategoryConfig = (category) => request.get(`/system/config/${category}`)
+export const updateCategoryConfig = (category, configs) =>
+  request.put(`/system/config/${category}`, { configs })
 
-export async function getCategoryConfig(category) {
-  return await request.get(`/system/config/${category}`)
-}
+// 连接测试
+export const testConnection = (type, configs) =>
+  request.post(`/system/test/${type}`, { configs })
 
-export async function updateCategoryConfig(category, configs) {
-  return await request.put(`/system/config/${category}`, { configs })
-}
+// LLM 提供商
+export const getLLMProviders = () => request.get('/system/llm/providers')
+export const getProviderModels = (name) => request.get(`/system/llm/providers/${name}/models`)
+export const getProviderDefaultConfig = (name) =>
+  request.get(`/system/llm/providers/${name}/default-config`)
+export const fetchModelsFromAPI = (provider, api_key, api_base) =>
+  request.post('/system/llm/fetch-models', { provider, api_key, api_base })
 
-export async function testDatabaseConnection(configs) {
-  return await request.post('/system/test/database', { configs })
-}
+// 系统初始化
+export const initSystem = (data) => request.post('/system/init', data)
 
-export async function testRedisConnection(configs) {
-  return await request.post('/system/test/redis', { configs })
-}
+// 权限策略
+export const reloadPolicies = () => request.post('/admin/policies/reload')
 
-export async function testMilvusConnection(configs) {
-  return await request.post('/system/test/milvus', { configs })
-}
-
-export async function testLlmConnection(configs) {
-  return await request.post('/system/test/llm', { configs })
-}
-
-export async function initializeSystem(data) {
-  return await request.post('/system/init', data)
-}
-
-export async function listLlmProviders() {
-  return await request.get('/system/llm/providers')
-}
-
-export async function listProviderModels(providerName) {
-  return await request.get(`/system/llm/providers/${providerName}/models`)
-}
-
-export async function getProviderDefaultConfig(providerName) {
-  return await request.get(`/system/llm/providers/${providerName}/default-config`)
-}
-
-export async function fetchModelsFromApi(provider, apiKey, apiBase) {
-  return await request.post('/system/llm/fetch-models', { provider, apiKey, apiBase })
-}
-
-export {
-  listLlmProviders as getLLMProviders,
-  testLlmConnection as testConnection,
-  initializeSystem as initSystem
-}
+// 审计日志相关
+export const getAuditLogs = (params) => request.get('/admin/audit-logs', { params })
+export const getAuditLogDetail = (id) => request.get(`/admin/audit-logs/${id}`)
+export const exportAuditLogs = (params) => 
+  request.get('/admin/audit-logs/export', { params, responseType: 'blob' })

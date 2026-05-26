@@ -15,7 +15,11 @@ export function generateSignature(params, secret) {
   }
   
   const sortedKeys = Object.keys(params).sort()
-  const signString = sortedKeys.map(key => `${key}=${params[key]}`).join('&')
+  const signString = sortedKeys.map(key => {
+    const value = params[key]
+    const stringValue = typeof value === 'object' ? JSON.stringify(value) : value
+    return `${key}=${stringValue}`
+  }).join('&')
   return CryptoJS.HmacSHA256(signString, secret).toString(CryptoJS.enc.Hex)
 }
 
