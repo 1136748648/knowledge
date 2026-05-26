@@ -1,8 +1,10 @@
+import logging
 import hashlib
 import hmac
 import json
 import time
 from typing import Dict, Any
+logger = logging.getLogger(__name__)
 
 
 def generate_nonce(length: int = 16) -> str:
@@ -25,7 +27,8 @@ def generate_signature(params: Dict[str, Any], secret: str) -> str:
         params = {}
     
     sorted_keys = sorted(params.keys())
-    sign_string = '&'.join(f"{k}={json.dumps(params[k]) if isinstance(params[k], (dict, list)) else params[k]}" for k in sorted_keys)
+    sign_string = '&'.join(f"{k}={json.dumps(params[k], separators=(',', ':')) if isinstance(params[k], (dict, list)) else params[k]}" for k in sorted_keys)
+    logger.debug(f"签名前字符串: {sign_string}")
     signature = hmac.new(secret.encode(), sign_string.encode(), hashlib.sha256).hexdigest()
     return signature
 
