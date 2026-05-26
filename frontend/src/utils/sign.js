@@ -1,4 +1,5 @@
 import CryptoJS from 'crypto-js'
+import { logger } from './logger'
 
 export function generateNonce(length = 16) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
@@ -20,7 +21,7 @@ export function generateSignature(params, secret) {
     const stringValue = typeof value === 'object' ? JSON.stringify(value) : value
     return `${key}=${stringValue}`
   }).join('&')
-  console.log(`签名前字符串 ${signString}`);
+  logger.debug(`签名前字符串 ${signString}`)
   return CryptoJS.HmacSHA256(signString, secret).toString(CryptoJS.enc.Hex)
 }
 
