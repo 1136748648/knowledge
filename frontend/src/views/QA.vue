@@ -74,6 +74,7 @@
 import { ref, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { askQuestion } from '@/api/qa'
+import { MagicStick, ChatDotRound } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 const input = ref('')

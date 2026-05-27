@@ -12,11 +12,7 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.models.schemas import UserContext
 
-settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
-
-LOCAL_JWT_SECRET = settings.ENCRYPTION_KEY or "knowledge-platform-local-secret-key-change-in-production"
-LOCAL_JWT_ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
@@ -35,6 +31,10 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_local_token(user_id: str, username: str, roles: list[str], dept_id: str | None = None) -> dict:
+    settings = get_settings()
+    jwt_secret = settings.ENCRYPTION_KEY or "knowledge-platform-local-secret-key-change-in-production"
+    jwt_algorithm = "HS256"
+    
     expires_in = 86400
     expire = int(time.time()) + expires_in
     payload = {
@@ -46,7 +46,7 @@ def create_local_token(user_id: str, username: str, roles: list[str], dept_id: s
         "iat": int(time.time()),
         "iss": "knowledge-platform-local",
     }
-    token = jwt.encode(payload, LOCAL_JWT_SECRET, algorithm=LOCAL_JWT_ALGORITHM)
+    token = jwt.encode(payload, jwt_secret, algorithm=jwt_algorithm)
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -66,6 +66,7 @@ class KeycloakPublicKey(BaseModel):
 @lru_cache(maxsize=1)
 def _fetch_keycloak_realm_public_keys() -> dict:
     import httpx
+    settings = get_settings()
     url = f"{settings.KEYCLOAK_SERVER_URL}/realms/{settings.KEYCLOAK_REALM}/protocol/openid-connect/certs"
     try:
         resp = httpx.get(url, timeout=10)
@@ -78,7 +79,9 @@ def _fetch_keycloak_realm_public_keys() -> dict:
 
 def _verify_local_token(token: str) -> UserContext | None:
     try:
-        payload = jwt.decode(token, LOCAL_JWT_SECRET, algorithms=[LOCAL_JWT_ALGORITHM])
+        settings = get_settings()
+        jwt_secret = settings.ENCRYPTION_KEY or "knowledge-platform-local-secret-key-change-in-production"
+        payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
         return UserContext(
             user_id=payload.get("sub", ""),
             username=payload.get("preferred_username", ""),
@@ -93,6 +96,7 @@ def _verify_local_token(token: str) -> UserContext | None:
 
 def _verify_keycloak_token(token: str) -> UserContext | None:
     try:
+        settings = get_settings()
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get("kid")
         if not kid:

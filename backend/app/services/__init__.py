@@ -3,76 +3,29 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dal import get_adapter, get_db
 from app.dal.repositories import (
-    WikiPageRepository,
-    WikiPageVersionRepository,
-    LocalUserRepository,
-    KnowledgeNavRepository,
-    NavContentLinkRepository,
+    EmployeeRepository,
     SearchEventRepository,
     HeatmapStatsRepository,
     AuditLogRepository,
 )
-from .wiki_service import WikiService
 from .auth_service import AuthService
-from .knowledge_service import KnowledgeService
 from .heatmap_service import HeatmapService
 from .admin_service import AdminService
 from .qa_service import QAService
 from .storage_service import StorageService
 from .config_service import ConfigService
-from .tags_service import TagsService
-from .chunking_service import ChunkingService
-from .document_processor_service import DocumentProcessorService
 
 
 @lru_cache()
-def get_wiki_page_repo() -> WikiPageRepository:
+def get_employee_repo() -> EmployeeRepository:
     adapter = get_adapter()
-    return WikiPageRepository(adapter)
-
-
-@lru_cache()
-def get_wiki_version_repo() -> WikiPageVersionRepository:
-    adapter = get_adapter()
-    return WikiPageVersionRepository(adapter)
-
-
-def get_wiki_service(
-    page_repo: WikiPageRepository = Depends(get_wiki_page_repo),
-    version_repo: WikiPageVersionRepository = Depends(get_wiki_version_repo),
-) -> WikiService:
-    return WikiService(page_repo, version_repo)
-
-
-@lru_cache()
-def get_local_user_repo() -> LocalUserRepository:
-    adapter = get_adapter()
-    return LocalUserRepository(adapter)
+    return EmployeeRepository(adapter)
 
 
 def get_auth_service(
-    user_repo: LocalUserRepository = Depends(get_local_user_repo),
+    user_repo: EmployeeRepository = Depends(get_employee_repo),
 ) -> AuthService:
     return AuthService(user_repo)
-
-
-@lru_cache()
-def get_knowledge_nav_repo() -> KnowledgeNavRepository:
-    adapter = get_adapter()
-    return KnowledgeNavRepository(adapter)
-
-
-@lru_cache()
-def get_nav_content_link_repo() -> NavContentLinkRepository:
-    adapter = get_adapter()
-    return NavContentLinkRepository(adapter)
-
-
-def get_knowledge_service(
-    nav_repo: KnowledgeNavRepository = Depends(get_knowledge_nav_repo),
-    link_repo: NavContentLinkRepository = Depends(get_nav_content_link_repo),
-) -> KnowledgeService:
-    return KnowledgeService(nav_repo, link_repo)
 
 
 @lru_cache()
@@ -119,17 +72,9 @@ def get_storage_service(
 
 
 __all__ = [
-    "WikiService",
-    "get_wiki_service",
-    "get_wiki_page_repo",
-    "get_wiki_version_repo",
     "AuthService",
     "get_auth_service",
-    "get_local_user_repo",
-    "KnowledgeService",
-    "get_knowledge_service",
-    "get_knowledge_nav_repo",
-    "get_nav_content_link_repo",
+    "get_employee_repo",
     "HeatmapService",
     "get_heatmap_service",
     "get_search_event_repo",

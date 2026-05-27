@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     # Audit
     AUDIT_LOG_ENABLED: bool = True
 
+    # Storage
+    STORAGE_PROVIDER: str = "minio"
+    STORAGE_ENDPOINT: str = "localhost:9000"
+    STORAGE_ACCESS_KEY: str = "admin"
+    STORAGE_SECRET_KEY: str = ""
+    STORAGE_BUCKET: str = "wiki"
+    STORAGE_REGION: str = "us-east-1"
+    STORAGE_USE_SSL: bool = False
+
     # Built-in Admin (for initial setup)
     BUILTIN_ADMIN_USER: str = "builtin-admin"
     BUILTIN_ADMIN_PASS: str = "admin123"
@@ -71,7 +80,7 @@ class Settings(BaseSettings):
     SIGNATURE_TIMESTAMP_TOLERANCE: int = 60
     SIGNATURE_EXCLUDED_PATHS: str = "/health,/api/system/status"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
 
 
 def validate_settings(settings: Settings) -> None:

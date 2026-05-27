@@ -20,19 +20,9 @@ const routes = [
         component: () => import('@/views/Dashboard.vue'),
       },
       {
-        path: 'wiki',
-        name: 'Wiki',
-        component: () => import('@/views/Wiki.vue'),
-      },
-      {
         path: 'qa',
         name: 'QA',
         component: () => import('@/views/QA.vue'),
-      },
-      {
-        path: 'knowledge',
-        name: 'Knowledge',
-        component: () => import('@/views/Knowledge.vue'),
       },
       {
         path: 'heatmap',
@@ -43,12 +33,6 @@ const routes = [
         path: 'admin/settings',
         name: 'Settings',
         component: () => import('@/views/admin/Settings.vue'),
-        meta: { requiresAdmin: true },
-      },
-      {
-        path: 'admin/tags',
-        name: 'TagsManager',
-        component: () => import('@/views/admin/TagsManager.vue'),
         meta: { requiresAdmin: true },
       },
       {

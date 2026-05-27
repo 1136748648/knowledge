@@ -132,7 +132,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { TrendCharts, ArrowRight } from '@element-plus/icons-vue'
+import { TrendCharts, ArrowRight, Document, ChatDotRound, User, Compass, Setting } from '@element-plus/icons-vue'
 import { heatmapApi } from '@/api/heatmap'
 
 const { t } = useI18n()

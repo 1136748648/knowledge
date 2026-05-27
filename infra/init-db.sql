@@ -5,43 +5,8 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "ltree";
 
--- Wiki页面表
-CREATE TABLE IF NOT EXISTS wiki_pages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    title VARCHAR(500) NOT NULL,
-    content TEXT NOT NULL,
-    slug VARCHAR(500) UNIQUE NOT NULL,
-    parent_id UUID REFERENCES wiki_pages(id),
-    acl JSONB DEFAULT '{}',
-    sensitivity VARCHAR(20) DEFAULT 'public',
-    dept_id VARCHAR(50),
-    created_by VARCHAR(100) NOT NULL,
-    updated_by VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_wiki_pages_slug ON wiki_pages(slug);
-CREATE INDEX IF NOT EXISTS idx_wiki_pages_parent_id ON wiki_pages(parent_id);
-CREATE INDEX IF NOT EXISTS idx_wiki_pages_sensitivity ON wiki_pages(sensitivity);
-CREATE INDEX IF NOT EXISTS idx_wiki_pages_dept_id ON wiki_pages(dept_id);
-
--- Wiki版本历史表
-CREATE TABLE IF NOT EXISTS wiki_page_versions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    page_id UUID NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
-    title VARCHAR(500) NOT NULL,
-    content TEXT NOT NULL,
-    version INTEGER NOT NULL,
-    edited_by VARCHAR(100) NOT NULL,
-    edit_summary VARCHAR(500),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_wiki_versions_page_id ON wiki_page_versions(page_id);
-CREATE INDEX IF NOT EXISTS idx_wiki_versions_page_version ON wiki_page_versions(page_id, version);
-
--- 员工档案表
+-- 员工表（合并员工档案和本地用户）
+-- 员工即登录用户，员工ID作为登录用户名
 CREATE TABLE IF NOT EXISTS employees (
     employee_id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -55,6 +20,10 @@ CREATE TABLE IF NOT EXISTS employees (
     clearance_level INTEGER DEFAULT 1,
     dept_id VARCHAR(50),
     salary NUMERIC(12, 2),
+    -- 用户登录相关字段
+    password_hash VARCHAR(200),
+    roles TEXT[] DEFAULT '{}',
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -62,6 +31,7 @@ CREATE TABLE IF NOT EXISTS employees (
 CREATE INDEX IF NOT EXISTS idx_employees_department ON employees(department);
 CREATE INDEX IF NOT EXISTS idx_employees_dept_id ON employees(dept_id);
 CREATE INDEX IF NOT EXISTS idx_employees_manager_id ON employees(manager_id);
+CREATE INDEX IF NOT EXISTS idx_employees_is_active ON employees(is_active);
 
 -- 会话问答记录表
 CREATE TABLE IF NOT EXISTS conversations (
@@ -81,39 +51,9 @@ CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_dept_id ON conversations(dept_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at);
 
--- 知识导航树表
-CREATE TABLE IF NOT EXISTS knowledge_nav (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(200) NOT NULL,
-    parent_id UUID REFERENCES knowledge_nav(id) ON DELETE CASCADE,
-    path VARCHAR(500),
-    icon VARCHAR(50),
-    description TEXT,
-    sort_order INTEGER DEFAULT 0,
-    visibility_roles TEXT[],
-    created_by VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_knowledge_nav_parent_id ON knowledge_nav(parent_id);
-CREATE INDEX IF NOT EXISTS idx_knowledge_nav_path ON knowledge_nav(path);
-
--- 导航节点与内容关联表
-CREATE TABLE IF NOT EXISTS nav_content_links (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    nav_id UUID NOT NULL REFERENCES knowledge_nav(id) ON DELETE CASCADE,
-    content_type VARCHAR(20) NOT NULL,
-    content_id VARCHAR(100) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_nav_content_links_nav_id ON nav_content_links(nav_id);
-CREATE INDEX IF NOT EXISTS idx_nav_content_links_content ON nav_content_links(content_type, content_id);
-
 -- Casbin策略表
 CREATE TABLE IF NOT EXISTS casbin_rule (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     ptype VARCHAR(100) NOT NULL,
     v0 VARCHAR(100),
     v1 VARCHAR(100),
@@ -125,7 +65,7 @@ CREATE TABLE IF NOT EXISTS casbin_rule (
 
 -- 审计日志表
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id BIGINT PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     user_id VARCHAR(100) NOT NULL,
     user_roles TEXT[],
     action VARCHAR(50) NOT NULL,
@@ -142,25 +82,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
--- 本地用户表
-CREATE TABLE IF NOT EXISTS local_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username VARCHAR(100) UNIQUE NOT NULL,
-    password_hash VARCHAR(200) NOT NULL,
-    email VARCHAR(200) DEFAULT '',
-    roles TEXT[] DEFAULT '{}',
-    dept_id VARCHAR(50),
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_local_users_username ON local_users(username);
-CREATE INDEX IF NOT EXISTS idx_local_users_dept_id ON local_users(dept_id);
-
 -- 系统配置表
 CREATE TABLE IF NOT EXISTS system_config (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     category VARCHAR(50) NOT NULL,
     key VARCHAR(200) NOT NULL,
     value TEXT,
@@ -175,7 +99,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_system_config_category_key ON system_confi
 
 -- 搜索事件表
 CREATE TABLE IF NOT EXISTS search_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     query_text VARCHAR(500) NOT NULL,
     query_embedding TEXT,
     user_id VARCHAR(128),
@@ -192,7 +116,7 @@ CREATE INDEX IF NOT EXISTS idx_search_events_user_id ON search_events(user_id);
 
 -- 热力图统计表
 CREATE TABLE IF NOT EXISTS heatmap_stats (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     stat_type VARCHAR(20) NOT NULL,
     stat_key VARCHAR(500) NOT NULL,
     stat_date DATE NOT NULL,
@@ -237,7 +161,7 @@ CREATE INDEX IF NOT EXISTS idx_trace_status_time ON trace_sessions(status, start
 CREATE TABLE IF NOT EXISTS trace_spans (
     id VARCHAR(64) PRIMARY KEY,
     trace_id VARCHAR(32) NOT NULL,
-    span_id VARCHAR(32) NOT NULL,
+    span_id VARCHAR(32) NOT NULL UNIQUE,
     parent_span_id VARCHAR(32),
     session_id VARCHAR(64) NOT NULL,
     agent_id VARCHAR(64) NOT NULL,
@@ -296,26 +220,7 @@ CREATE TABLE IF NOT EXISTS trace_stats (
 CREATE INDEX IF NOT EXISTS idx_stats_user_date ON trace_stats(user_id, stat_date);
 
 -- 初始化数据
-INSERT INTO system_config (category, key, value, description) VALUES
-('system', 'version', '0.1.0', '系统版本'),
-('system', 'name', 'Knowledge Platform', '系统名称'),
-('security', 'session_timeout', '3600', '会话超时时间（秒）');
-
-INSERT INTO casbin_rule (ptype, v0, v1, v2) VALUES
-('p', 'admin', 'wiki', 'read'),
-('p', 'admin', 'wiki', 'write'),
-('p', 'admin', 'wiki', 'delete'),
-('p', 'admin', 'employee', 'read'),
-('p', 'admin', 'employee', 'write'),
-('p', 'hr', 'employee', 'read'),
-('p', 'hr', 'wiki', 'read'),
-('p', 'hr', 'wiki', 'write'),
-('p', 'manager', 'wiki', 'read'),
-('p', 'manager', 'employee', 'read'),
-('p', 'user', 'wiki', 'read');
-
-INSERT INTO casbin_rule (ptype, v0, v1) VALUES
-('g', 'admin', 'admin'),
-('g', 'hr_user', 'hr'),
-('g', 'manager_user', 'manager'),
-('g', 'normal_user', 'user');
+INSERT INTO system_config (category, key, value, value_type, description, is_sensitive, created_at, updated_at) VALUES
+('system', 'version', '0.1.0', 'string', '系统版本', false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('system', 'name', 'Knowledge Platform', 'string', '系统名称', false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('security', 'session_timeout', '3600', 'number', '会话超时时间（秒）', false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

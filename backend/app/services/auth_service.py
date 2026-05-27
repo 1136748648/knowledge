@@ -1,5 +1,5 @@
 import logging
-from app.dal.repositories import LocalUserRepository
+from app.dal.repositories import EmployeeRepository
 from app.core.security import hash_password, verify_password, create_local_token
 from app.models.schemas import UserContext
 
@@ -7,11 +7,11 @@ logger = logging.getLogger(__name__)
 
 
 class AuthService:
-    def __init__(self, user_repo: LocalUserRepository):
+    def __init__(self, user_repo: EmployeeRepository):
         self.user_repo = user_repo
 
     async def authenticate(self, username: str, password: str) -> dict:
-        user = await self.user_repo.get_by_username(username)
+        user = await self.user_repo.get_by_employee_id(username)
 
         if not user or not verify_password(password, user.password_hash):
             return {"success": False, "error": "用户名或密码错误"}
@@ -20,8 +20,8 @@ class AuthService:
             return {"success": False, "error": "账号已被禁用"}
 
         token = create_local_token(
-            user_id=str(user.id),
-            username=user.username,
+            user_id=user.employee_id,
+            username=user.employee_id,
             roles=user.roles or ["employee"],
             dept_id=user.dept_id,
         )
@@ -40,7 +40,7 @@ class AuthService:
         if user_id == "builtin-admin":
             return {"success": False, "error": "内置管理员不支持修改密码"}
 
-        user = await self.user_repo.get_by_id(int(user_id))
+        user = await self.user_repo.get_by_employee_id(user_id)
         if not user:
             return {"success": False, "error": "用户不存在"}
 
@@ -49,7 +49,7 @@ class AuthService:
 
         user.password_hash = hash_password(new_password)
         await self.user_repo.update(user)
-        logger.info(f"User {user.username} changed password")
+        logger.info(f"User {user.employee_id} changed password")
 
         return {"success": True, "message": "密码修改成功"}
 
@@ -63,13 +63,13 @@ class AuthService:
         }
 
     async def keycloak_callback(self, keycloak_username: str) -> dict:
-        local_user = await self.user_repo.get_by_username(keycloak_username)
+        user = await self.user_repo.get_by_employee_id(keycloak_username)
 
-        if local_user:
+        if user:
             return {
-                "user_id": str(local_user.id),
-                "roles": local_user.roles or ["employee"],
-                "dept_id": local_user.dept_id,
+                "user_id": user.employee_id,
+                "roles": user.roles or ["employee"],
+                "dept_id": user.dept_id,
             }
         else:
             return {

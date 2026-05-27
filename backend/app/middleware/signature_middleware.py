@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from app.config import get_settings
-from app.core.sign_utils import verify_signature, is_timestamp_valid
+from app.core.sign_utils import verify_signature, is_timestamp_valid, compute_body_hash
 
 logger = logging.getLogger(__name__)
 
@@ -55,25 +55,21 @@ class SignatureMiddleware(BaseHTTPMiddleware):
                 content={"error_code": "99004", "message": "Request expired", "detail": "Request timestamp expired"}
             )
         
-        params = {}
+        body_bytes = b''
+        if request.method in ["POST", "PUT", "PATCH"]:
+            try:
+                body_bytes = await request.body()
+            except Exception as e:
+                logger.debug(f"Failed to read request body: {e}")
         
-        query_params = parse_qs(str(request.url.query))
-        for key, value in query_params.items():
-            params[key] = value[0] if len(value) == 1 else value
+        body_hash = compute_body_hash(body_bytes)
+        logger.debug(f"Request body hash: {body_hash}")
         
-        try:
-            if request.method in ["POST", "PUT", "PATCH"]:
-                try:
-                    body = await request.json()
-                    if isinstance(body, dict):
-                        params.update(body)
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.debug(f"Failed to parse request body: {e}")
-        
-        params['timestamp'] = timestamp_str
-        params['nonce'] = nonce
+        params = {
+            'timestamp': timestamp_str,
+            'nonce': nonce,
+            'body_hash': body_hash
+        }
         
         if not verify_signature(params, signature, settings.SIGNATURE_SECRET_KEY):
             logger.warning(f"Signature verification failed: {path}")

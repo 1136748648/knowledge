@@ -4,7 +4,6 @@ import logging
 
 from app.config import get_settings
 
-settings = get_settings()
 logger = logging.getLogger(__name__)
 
 _enforcer = None
@@ -58,6 +57,7 @@ async def get_enforcer(refresh: bool = False) -> casbin.AsyncEnforcer:
     global _enforcer, _policy_version
     
     if refresh or _enforcer is None:
+        settings = get_settings()
         adapter = casbin_async_sqlalchemy_adapter.Adapter(settings.DATABASE_URL)
         model = casbin.model.Model()
         model.load_model_from_text(RBAC_MODEL)
@@ -73,7 +73,7 @@ async def _init_default_policies(enforcer: casbin.AsyncEnforcer):
         if not enforcer.enforce(policy[0], policy[1], policy[2]):
             await enforcer.add_policy(*policy)
     for role in DEFAULT_ROLES:
-        if not await enforcer.has_role_for_user(role[0], role[1]):
+        if not enforcer.has_role_for_user(role[0], role[1]):
             await enforcer.add_role_for_user(role[0], role[1])
     logger.info("Casbin default policies initialized")
 
@@ -81,7 +81,7 @@ async def _init_default_policies(enforcer: casbin.AsyncEnforcer):
 async def check_permission(user_roles: list[str], resource: str, action: str) -> bool:
     enforcer = await get_enforcer()
     for role in user_roles:
-        if await enforcer.enforce(role, resource, action):
+        if enforcer.enforce(role, resource, action):
             return True
     return False
 
@@ -91,7 +91,7 @@ async def get_user_permissions(user_roles: list[str]) -> list[dict]:
     permissions = []
     seen = set()
     for role in user_roles:
-        for p in await enforcer.get_permissions_for_user(role):
+        for p in enforcer.get_permissions_for_user(role):
             key = tuple(p)
             if key not in seen:
                 seen.add(key)
@@ -101,7 +101,7 @@ async def get_user_permissions(user_roles: list[str]) -> list[dict]:
 
 async def add_policy(sub: str, obj: str, act: str) -> bool:
     enforcer = await get_enforcer()
-    if not await enforcer.enforce(sub, obj, act):
+    if not enforcer.enforce(sub, obj, act):
         result = await enforcer.add_policy(sub, obj, act)
         return result
     return True
@@ -114,7 +114,7 @@ async def remove_policy(sub: str, obj: str, act: str) -> bool:
 
 async def add_role_for_user(user: str, role: str) -> bool:
     enforcer = await get_enforcer()
-    if not await enforcer.has_role_for_user(user, role):
+    if not enforcer.has_role_for_user(user, role):
         return await enforcer.add_role_for_user(user, role)
     return True
 
@@ -126,7 +126,7 @@ async def remove_role_for_user(user: str, role: str) -> bool:
 
 async def get_user_roles(user: str) -> list[str]:
     enforcer = await get_enforcer()
-    return await enforcer.get_roles_for_user(user)
+    return enforcer.get_roles_for_user(user)
 
 
 async def init_policies():

@@ -58,73 +58,6 @@ class ModelRepository(Repository):
             return False
 
 
-class WikiPageRepository(ModelRepository):
-    def __init__(self, adapter: PostgreSQLAdapter):
-        from app.models.wiki import WikiPage
-        super().__init__(adapter, WikiPage)
-        self.WikiPage = WikiPage
-
-    async def get_by_slug(self, slug: str) -> Optional[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(self.WikiPage).where(self.WikiPage.slug == slug)
-            )
-            return result.scalar_one_or_none()
-
-    async def list_by_parent(self, parent_id: Optional[uuid.UUID], page: int = 1, page_size: int = 20) -> List[Any]:
-        async with await self._get_session() as session:
-            query = select(self.WikiPage)
-            if parent_id:
-                query = query.where(self.WikiPage.parent_id == parent_id)
-            query = query.offset((page - 1) * page_size).limit(page_size)
-            result = await session.execute(query)
-            return result.scalars().all()
-
-    async def list_by_sensitivity(self, sensitivity: str, page: int = 1, page_size: int = 20) -> List[Any]:
-        async with await self._get_session() as session:
-            query = select(self.WikiPage).where(self.WikiPage.sensitivity == sensitivity)
-            query = query.offset((page - 1) * page_size).limit(page_size)
-            result = await session.execute(query)
-            return result.scalars().all()
-
-    async def search(self, query: str, page: int = 1, page_size: int = 20) -> List[Any]:
-        async with await self._get_session() as session:
-            search_query = (
-                select(self.WikiPage)
-                .where(
-                    func.to_tsvector("simple", self.WikiPage.title + " " + self.WikiPage.content)
-                    .match(query, postgresql_regconfig="simple")
-                )
-                .offset((page - 1) * page_size)
-                .limit(page_size)
-            )
-            result = await session.execute(search_query)
-            return result.scalars().all()
-
-
-class WikiPageVersionRepository(ModelRepository):
-    def __init__(self, adapter: PostgreSQLAdapter):
-        from app.models.wiki import WikiPageVersion
-        super().__init__(adapter, WikiPageVersion)
-        self.WikiPageVersion = WikiPageVersion
-
-    async def get_by_page_id(self, page_id: uuid.UUID) -> List[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(self.WikiPageVersion)
-                .where(self.WikiPageVersion.page_id == page_id)
-                .order_by(self.WikiPageVersion.version.desc())
-            )
-            return result.scalars().all()
-
-    async def get_max_version(self, page_id: uuid.UUID) -> int:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(func.max(self.WikiPageVersion.version)).where(self.WikiPageVersion.page_id == page_id)
-            )
-            return result.scalar() or 0
-
-
 class EmployeeRepository(ModelRepository):
     def __init__(self, adapter: PostgreSQLAdapter):
         from app.models.employee import Employee
@@ -135,6 +68,20 @@ class EmployeeRepository(ModelRepository):
         async with await self._get_session() as session:
             result = await session.execute(
                 select(self.Employee).where(self.Employee.employee_id == employee_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def get_by_employee_id(self, employee_id: str) -> Optional[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(
+                select(self.Employee).where(self.Employee.employee_id == employee_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def get_by_username(self, username: str) -> Optional[Any]:
+        async with await self._get_session() as session:
+            result = await session.execute(
+                select(self.Employee).where(self.Employee.employee_id == username)
             )
             return result.scalar_one_or_none()
 
@@ -165,6 +112,13 @@ class EmployeeRepository(ModelRepository):
             result = await session.execute(query)
             return result.scalars().all()
 
+    async def list_active_users(self, page: int = 1, page_size: int = 20) -> List[Any]:
+        async with await self._get_session() as session:
+            query = select(self.Employee).where(self.Employee.is_active == True)
+            query = query.offset((page - 1) * page_size).limit(page_size)
+            result = await session.execute(query)
+            return result.scalars().all()
+
 
 class ConversationRepository(ModelRepository):
     def __init__(self, adapter: PostgreSQLAdapter):
@@ -186,52 +140,6 @@ class ConversationRepository(ModelRepository):
             query = query.order_by(self.Conversation.created_at.desc())
             query = query.offset((page - 1) * page_size).limit(page_size)
             result = await session.execute(query)
-            return result.scalars().all()
-
-
-class KnowledgeNavRepository(ModelRepository):
-    def __init__(self, adapter: PostgreSQLAdapter):
-        from app.models.navigation import KnowledgeNav
-        super().__init__(adapter, KnowledgeNav)
-        self.KnowledgeNav = KnowledgeNav
-
-    async def get_root_nodes(self) -> List[Any]:
-        async with await self._get_session() as session:
-            query = select(self.KnowledgeNav).where(self.KnowledgeNav.parent_id.is_(None)).order_by(self.KnowledgeNav.sort_order)
-            result = await session.execute(query)
-            return result.scalars().all()
-
-    async def get_by_parent_id(self, parent_id: uuid.UUID) -> List[Any]:
-        async with await self._get_session() as session:
-            query = select(self.KnowledgeNav).where(self.KnowledgeNav.parent_id == parent_id).order_by(self.KnowledgeNav.sort_order)
-            result = await session.execute(query)
-            return result.scalars().all()
-
-    async def get_by_path(self, path: str) -> Optional[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(select(self.KnowledgeNav).where(self.KnowledgeNav.path == path))
-            return result.scalar_one_or_none()
-
-
-class NavContentLinkRepository(ModelRepository):
-    def __init__(self, adapter: PostgreSQLAdapter):
-        from app.models.navigation import NavContentLink
-        super().__init__(adapter, NavContentLink)
-        self.NavContentLink = NavContentLink
-
-    async def get_by_nav_id(self, nav_id: uuid.UUID) -> List[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(select(self.NavContentLink).where(self.NavContentLink.nav_id == nav_id))
-            return result.scalars().all()
-
-    async def get_by_content(self, content_type: str, content_id: str) -> List[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(self.NavContentLink).where(
-                    self.NavContentLink.content_type == content_type,
-                    self.NavContentLink.content_id == content_id
-                )
-            )
             return result.scalars().all()
 
 
@@ -379,25 +287,6 @@ class SystemConfigRepository(ModelRepository):
             return result.scalar_one_or_none()
 
 
-class LocalUserRepository(ModelRepository):
-    def __init__(self, adapter: PostgreSQLAdapter):
-        from app.models.local_user import LocalUser
-        super().__init__(adapter, LocalUser)
-        self.LocalUser = LocalUser
-
-    async def get_by_username(self, username: str) -> Optional[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(select(self.LocalUser).where(self.LocalUser.username == username))
-            return result.scalar_one_or_none()
-
-    async def list_active_users(self, page: int = 1, page_size: int = 20) -> List[Any]:
-        async with await self._get_session() as session:
-            query = select(self.LocalUser).where(self.LocalUser.is_active == True)
-            query = query.offset((page - 1) * page_size).limit(page_size)
-            result = await session.execute(query)
-            return result.scalars().all()
-
-
 class SearchEventRepository(ModelRepository):
     def __init__(self, adapter: PostgreSQLAdapter):
         from app.models.heatmap import SearchEvent
@@ -446,133 +335,3 @@ class HeatmapStatsRepository(ModelRepository):
                 )
             )
             return result.scalar_one_or_none()
-
-
-class WikiFileRepository(ModelRepository):
-    def __init__(self, adapter: PostgreSQLAdapter):
-        from app.models.wiki_storage import WikiFile
-        super().__init__(adapter, WikiFile)
-        self.WikiFile = WikiFile
-
-    async def get_by_page_id(self, page_id: uuid.UUID) -> List[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(self.WikiFile)
-                .where(self.WikiFile.page_id == page_id)
-                .order_by(self.WikiFile.version.desc())
-            )
-            return result.scalars().all()
-
-    async def get_current_by_page_id(self, page_id: uuid.UUID) -> Optional[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(self.WikiFile).where(
-                    self.WikiFile.page_id == page_id,
-                    self.WikiFile.is_current == True
-                )
-            )
-            return result.scalar_one_or_none()
-
-    async def get_max_version(self, page_id: uuid.UUID) -> int:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(func.max(self.WikiFile.version)).where(self.WikiFile.page_id == page_id)
-            )
-            return result.scalar() or 0
-
-    async def set_not_current_by_page_id(self, page_id: uuid.UUID):
-        async with await self._get_session() as session:
-            stmt = (
-                self.WikiFile.__table__.update()
-                .where(
-                    self.WikiFile.page_id == page_id,
-                    self.WikiFile.is_current == True
-                )
-                .values(is_current=False)
-            )
-            await session.execute(stmt)
-            await session.commit()
-
-
-class WikiChunkRepository(ModelRepository):
-    def __init__(self, adapter: PostgreSQLAdapter):
-        from app.models.wiki_storage import WikiChunk
-        super().__init__(adapter, WikiChunk)
-        self.WikiChunk = WikiChunk
-
-    async def get_by_file_id(self, file_id: uuid.UUID) -> List[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(self.WikiChunk)
-                .where(self.WikiChunk.file_id == file_id)
-                .order_by(self.WikiChunk.chunk_index)
-            )
-            return result.scalars().all()
-
-    async def delete_by_file_id(self, file_id: uuid.UUID):
-        async with await self._get_session() as session:
-            stmt = self.WikiChunk.__table__.delete().where(self.WikiChunk.file_id == file_id)
-            await session.execute(stmt)
-            await session.commit()
-
-
-class WikiTagRepository(ModelRepository):
-    def __init__(self, adapter: PostgreSQLAdapter):
-        from app.models.wiki_storage import WikiTag
-        super().__init__(adapter, WikiTag)
-        self.WikiTag = WikiTag
-
-    async def get_by_name(self, name: str) -> Optional[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(select(self.WikiTag).where(self.WikiTag.name == name))
-            return result.scalar_one_or_none()
-
-    async def get_root_tags(self) -> List[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(self.WikiTag)
-                .where(self.WikiTag.parent_id.is_(None))
-                .order_by(self.WikiTag.sort_order)
-            )
-            return result.scalars().all()
-
-    async def get_children(self, parent_id: uuid.UUID) -> List[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(self.WikiTag)
-                .where(self.WikiTag.parent_id == parent_id)
-                .order_by(self.WikiTag.sort_order)
-            )
-            return result.scalars().all()
-
-    async def get_all_with_children(self) -> List[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(select(self.WikiTag).order_by(self.WikiTag.sort_order))
-            return result.scalars().all()
-
-
-class ChunkingRuleRepository(ModelRepository):
-    def __init__(self, adapter: PostgreSQLAdapter):
-        from app.models.wiki_storage import ChunkingRule
-        super().__init__(adapter, ChunkingRule)
-        self.ChunkingRule = ChunkingRule
-
-    async def get_active_rules(self) -> List[Any]:
-        async with await self._get_session() as session:
-            result = await session.execute(
-                select(self.ChunkingRule)
-                .where(self.ChunkingRule.is_active == True)
-                .order_by(self.ChunkingRule.sort_order)
-            )
-            return result.scalars().all()
-
-    async def update_order(self, rule_orders: List[dict]):
-        async with await self._get_session() as session:
-            for item in rule_orders:
-                stmt = (
-                    self.ChunkingRule.__table__.update()
-                    .where(self.ChunkingRule.id == item["id"])
-                    .values(sort_order=item["sort_order"])
-                )
-                await session.execute(stmt)
-            await session.commit()

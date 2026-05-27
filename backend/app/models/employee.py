@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, date
 
-from sqlalchemy import String, Date, Numeric, ForeignKey
+from sqlalchemy import String, Date, Numeric, ForeignKey, Boolean, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.dal import Base
@@ -22,6 +22,12 @@ class Employee(Base):
     clearance_level: Mapped[int] = mapped_column(default=1)
     dept_id: Mapped[str | None] = mapped_column(String(50))
     salary: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    
+    # 用户登录相关字段（合并自 local_users）
+    password_hash: Mapped[str | None] = mapped_column(String(200))
+    roles: Mapped[list[str]] = mapped_column(ARRAY(String), default=lambda: [])
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
 

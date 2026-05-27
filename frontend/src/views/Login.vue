@@ -71,6 +71,7 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import request from '@/api/request'
+import { Switch, Connection } from '@element-plus/icons-vue'
 
 const { t, locale } = useI18n()
 const currentLangLabel = computed(() => locale.value === 'en-US' ? 'English' : '中文')

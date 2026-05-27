@@ -39,8 +39,8 @@
                   <span class="item-count">{{ item.count }} {{ t('heatmap.times') }}</span>
                   <span class="item-trend" :class="item.trend > 0 ? 'trend-up' : 'trend-down'">
                     <el-icon :size="12">
-                      <Top v-if="item.trend > 0" />
-                      <Bottom v-else />
+                      <ArrowUp v-if="item.trend > 0" />
+                      <ArrowDown v-else />
                     </el-icon>
                     {{ Math.abs(item.trend) }}%
                   </span>
@@ -116,7 +116,7 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
-import { Document, TrendCharts, DataAnalysis, Compass, Top, Bottom } from '@element-plus/icons-vue'
+import { Document, TrendCharts, DataAnalysis, Compass, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { heatmapApi } from '@/api/heatmap'
 
 const { t } = useI18n()

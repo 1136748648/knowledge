@@ -1,81 +1,91 @@
 import re
-from .base import BaseChunkingStrategy, Chunk
+from typing import List
+from .base import Chunk, ChunkingStrategy
 
-
-class HeadingChunkingStrategy(BaseChunkingStrategy):
-    strategy_name = "heading"
-
-    async def chunk(self, text: str, config: dict) -> list[Chunk]:
-        levels = config.get("levels", [1, 2, 3])
-        pattern = "|".join([r"^#{%d}\s+.+$" % l for l in levels])
-        matches = list(re.finditer(pattern, text, re.MULTILINE))
-
+class HeadingChunkingStrategy(ChunkingStrategy):
+    def __init__(self, levels: List[int] = None):
+        self.levels = levels or [1, 2, 3]
+    
+    def chunk(self, text: str) -> List[Chunk]:
         chunks = []
-        for i, match in enumerate(matches):
-            start = match.start()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-            chunk_text = text[start:end].strip()
-            if chunk_text:
-                chunks.append(Chunk(
-                    index=i,
-                    text=chunk_text,
-                    start_pos=start,
-                    end_pos=end,
-                    metadata={"heading": match.group()},
-                ))
+        lines = text.split('\n')
+        current_chunk = []
+        start_pos = 0
+        
+        for i, line in enumerate(lines):
+            if any(line.startswith('#' * level) for level in self.levels):
+                if current_chunk:
+                    chunk_text = '\n'.join(current_chunk)
+                    chunks.append(Chunk(
+                        text=chunk_text.strip(),
+                        start_pos=start_pos,
+                        end_pos=start_pos + len(chunk_text),
+                        chunk_index=len(chunks)
+                    ))
+                    start_pos += len(chunk_text) + 1
+                    current_chunk = []
+            current_chunk.append(line)
+        
+        if current_chunk:
+            chunk_text = '\n'.join(current_chunk)
+            chunks.append(Chunk(
+                text=chunk_text.strip(),
+                start_pos=start_pos,
+                end_pos=start_pos + len(chunk_text),
+                chunk_index=len(chunks)
+            ))
+        
         return chunks
 
-
-class ParagraphChunkingStrategy(BaseChunkingStrategy):
-    strategy_name = "paragraph"
-
-    async def chunk(self, text: str, config: dict) -> list[Chunk]:
-        min_length = config.get("min_length", 50)
-        paragraphs = re.split(r"\n\s*\n", text)
-
+class ParagraphChunkingStrategy(ChunkingStrategy):
+    def __init__(self, min_length: int = 50):
+        self.min_length = min_length
+    
+    def chunk(self, text: str) -> List[Chunk]:
+        paragraphs = re.split(r'\n\n+', text)
         chunks = []
-        current_pos = 0
-        for i, para in enumerate(paragraphs):
-            para = para.strip()
-            if len(para) >= min_length:
-                start = text.find(para, current_pos)
-                if start == -1:
-                    start = current_pos
-                end = start + len(para)
+        start_pos = 0
+        
+        for i, paragraph in enumerate(paragraphs):
+            paragraph = paragraph.strip()
+            if len(paragraph) >= self.min_length:
                 chunks.append(Chunk(
-                    index=i,
-                    text=para,
-                    start_pos=start,
-                    end_pos=end,
-                    metadata={},
+                    text=paragraph,
+                    start_pos=start_pos,
+                    end_pos=start_pos + len(paragraph),
+                    chunk_index=i
                 ))
-                current_pos = end
-
+            start_pos += len(paragraph) + 2
+        
         return chunks
 
-
-class LengthChunkingStrategy(BaseChunkingStrategy):
-    strategy_name = "length"
-
-    async def chunk(self, text: str, config: dict) -> list[Chunk]:
-        max_length = config.get("max_length", 5000)
-        overlap = config.get("overlap", 500)
-
+class LengthChunkingStrategy(ChunkingStrategy):
+    def __init__(self, max_tokens: int = 500, overlap: int = 50):
+        self.max_tokens = max_tokens
+        self.overlap = overlap
+    
+    def chunk(self, text: str) -> List[Chunk]:
         chunks = []
-        start = 0
+        tokens = text.split()
+        start_pos = 0
+        
         i = 0
-        while start < len(text):
-            end = min(start + max_length, len(text))
-            chunk_text = text[start:end]
-            if chunk_text:
-                chunks.append(Chunk(
-                    index=i,
-                    text=chunk_text,
-                    start_pos=start,
-                    end_pos=end,
-                    metadata={"length_based": True},
-                ))
-            start = end - overlap
-            i += 1
-
+        while i < len(tokens):
+            chunk_tokens = tokens[i:i + self.max_tokens]
+            chunk_text = ' '.join(chunk_tokens)
+            
+            if i > 0 and self.overlap > 0:
+                overlap_tokens = tokens[max(0, i - self.overlap):i]
+                chunk_text = ' '.join(overlap_tokens) + ' ' + chunk_text
+            
+            chunks.append(Chunk(
+                text=chunk_text,
+                start_pos=start_pos,
+                end_pos=start_pos + len(chunk_text),
+                chunk_index=len(chunks)
+            ))
+            
+            start_pos += len(chunk_text) + 1
+            i += self.max_tokens - self.overlap
+        
         return chunks

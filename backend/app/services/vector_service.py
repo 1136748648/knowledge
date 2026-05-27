@@ -7,7 +7,6 @@ import asyncio
 from app.config import get_settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
-settings = get_settings()
 logger = logging.getLogger(__name__)
 
 # Milvus REST API (available on port 19531 by default)
@@ -22,6 +21,7 @@ class VectorService:
     @property
     def base_url(self) -> str:
         if not self._base_url:
+            settings = get_settings()
             self._base_url = f"http://{settings.MILVUS_HOST}:{MILVUS_REST_PORT}"
         return self._base_url
 
@@ -41,6 +41,7 @@ class VectorService:
         if self._collection_created:
             return
 
+        settings = get_settings()
         collection_name = settings.MILVUS_COLLECTION
 
         # 检查 collection 是否存在
@@ -86,6 +87,7 @@ class VectorService:
     ) -> list[str]:
         """插入向量"""
         await self.ensure_collection()
+        settings = get_settings()
 
         if ids is None:
             ids = [str(uuid.uuid4()) for _ in texts]
@@ -123,6 +125,7 @@ class VectorService:
         """搜索相似向量"""
         start_time = time.time()
         await self.ensure_collection()
+        settings = get_settings()
 
         filters = []
         if user_id:
@@ -184,11 +187,19 @@ class VectorService:
     async def delete(self, ids: list[str]):
         """删除向量"""
         await self.ensure_collection()
+        settings = get_settings()
 
         await self._request("POST", "/v1/vector/delete", {
             "collectionName": settings.MILVUS_COLLECTION,
             "ids": ids,
         })
+
+    async def create_embedding(self, text: str) -> list[float]:
+        """创建文本嵌入向量"""
+        from app.services.llm_service import LLMService
+        
+        llm_service = LLMService()
+        return await llm_service.embed(text)
 
     async def close(self):
         """关闭连接（REST 无状态，无需操作）"""

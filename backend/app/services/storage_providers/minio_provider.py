@@ -11,6 +11,10 @@ class MinIOProvider(BaseStorageProvider):
 
     def __init__(self, config: StorageConfig):
         self.config = config
+        
+        if not config.endpoint:
+            raise ValueError("Storage endpoint is required for MinIO provider")
+        
         self.client = boto3.client(
             "s3",
             endpoint_url=f"{'https' if config.use_ssl else 'http'}://{config.endpoint}",

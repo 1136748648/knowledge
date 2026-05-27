@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.core.logging import setup_logging
 from app.core.trace import setup_trace_logging
 from app.middleware import TraceMiddleware, SignatureMiddleware
-from app.api import auth, wiki, qa, knowledge, admin, system, heatmap, storage, tags, chunking_rules
+from app.api import auth, qa, admin, system, heatmap, storage
 from app.dal import get_adapter, LocalUserRepository
 from app.core.exception_handler import custom_exception_handler
 
@@ -49,7 +49,6 @@ async def init_agents():
         register_security_agent,
         register_orchestrator_agent,
         register_db_agent,
-        register_wiki_agent,
         register_vector_agent,
         register_mindmap_agent,
     )
@@ -57,7 +56,6 @@ async def init_agents():
     register_security_agent()
     register_orchestrator_agent()
     register_db_agent()
-    register_wiki_agent()
     register_vector_agent()
     register_mindmap_agent()
 
@@ -152,15 +150,11 @@ app.add_middleware(SignatureMiddleware)
 app.add_exception_handler(Exception, custom_exception_handler)
 
 app.include_router(auth.router, prefix="/api/auth", tags=["认证"])
-app.include_router(wiki.router, prefix="/api/wiki", tags=["Wiki"])
 app.include_router(qa.router, prefix="/api/qa", tags=["问答"])
-app.include_router(knowledge.router, prefix="/api/knowledge", tags=["知识导航"])
 app.include_router(admin.router, prefix="/api/admin", tags=["管理"])
 app.include_router(system.router, prefix="/api/system", tags=["系统配置"])
 app.include_router(heatmap.router, tags=["热力图"])
 app.include_router(storage.router, prefix="/api/storage", tags=["存储"])
-app.include_router(tags.router, prefix="/api/tags", tags=["标签"])
-app.include_router(chunking_rules.router, prefix="/api/chunking-rules", tags=["切片规则"])
 
 
 @app.get("/health")

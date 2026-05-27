@@ -114,12 +114,12 @@ export default {
   },
   init: {
     confirmTitle: '确认初始化',
-    confirmMsg: '将执行：写入配置文件 → 创建数据库表 → 创建管理员账号 → 重启后端。确认继续？',
+    confirmMsg: '将执行：写入配置文件 → 重载配置 → 创建数据库表 → 创建管理员账号。确认继续？',
     confirmBtn: '开始初始化',
     cancelBtn: '取消',
-    successMsg: '初始化完成！后端正在重启...',
+    successMsg: '初始化完成！配置已重载...',
     successTitle: '初始化成功',
-    successNote: '后端已重启，请等待几秒后点击"去登录"。',
+    successNote: '配置已重载，请点击"去登录"。',
     failedMsg: '初始化失败',
   },
 }

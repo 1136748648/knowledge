@@ -114,12 +114,12 @@ export default {
   },
   init: {
     confirmTitle: 'Confirm Initialization',
-    confirmMsg: 'This will: write config file → create database tables → create admin account → restart backend. Continue?',
+    confirmMsg: 'This will: write config file → reload configuration → create database tables → create admin account. Continue?',
     confirmBtn: 'Start Initialization',
     cancelBtn: 'Cancel',
-    successMsg: 'Initialization complete! Backend is restarting...',
+    successMsg: 'Initialization complete! Configuration reloaded...',
     successTitle: 'Initialization Successful',
-    successNote: 'Backend has restarted. Please wait a few seconds then click "Go to Login".',
+    successNote: 'Configuration reloaded. Please click "Go to Login".',
     failedMsg: 'Initialization failed',
   },
 }

@@ -1,18 +1,18 @@
 import redis.asyncio as redis
 from app.config import get_settings
 
-_settings = get_settings()
 _redis_client: redis.Redis | None = None
 
 
 async def get_redis() -> redis.Redis:
     global _redis_client
     if _redis_client is None:
+        settings = get_settings()
         _redis_client = redis.Redis(
-            host=_settings.REDIS_HOST,
-            port=_settings.REDIS_PORT,
-            db=_settings.REDIS_DB,
-            password=_settings.REDIS_PASSWORD,
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
+            password=settings.REDIS_PASSWORD,
             decode_responses=True,
         )
     return _redis_client

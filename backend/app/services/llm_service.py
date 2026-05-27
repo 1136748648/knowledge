@@ -5,7 +5,6 @@ from typing import AsyncGenerator
 from app.config import get_settings
 from app.services.llm_providers import ProviderRegistry, BaseLLMProvider
 
-settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +29,7 @@ class LLMService:
 
     def _create_default_provider(self) -> BaseLLMProvider:
         """从默认配置创建提供商（兼容旧的 .env 模式）"""
-        # 默认使用 OpenAI 兼容模式
+        settings = get_settings()
         return ProviderRegistry.create("openai", {
             "api_key": settings.LLM_API_KEY,
             "api_base": settings.LLM_API_BASE,

@@ -7,8 +7,6 @@ from sqlalchemy.orm import DeclarativeBase
 from app.config import get_settings
 from app.dal.base import DatabaseAdapter
 
-settings = get_settings()
-
 _base = None
 
 
@@ -27,10 +25,12 @@ class PostgreSQLAdapter(DatabaseAdapter):
     _session_factory = None
 
     def __init__(self, db_url: str = None):
+        settings = get_settings()
         self.db_url = db_url or settings.DATABASE_URL
 
     async def connect(self) -> None:
         if PostgreSQLAdapter._engine is None:
+            settings = get_settings()
             PostgreSQLAdapter._engine = create_async_engine(
                 self.db_url,
                 echo=settings.DEBUG,

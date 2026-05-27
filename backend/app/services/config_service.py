@@ -73,20 +73,23 @@ class ConfigService:
 
     async def get(self, category: str, key: str, default: str = None) -> str | None:
         """获取配置值，优先级：环境变量 > 数据库 > 默认值"""
-        # 1. 环境变量优先
-        schema = CONFIG_SCHEMA.get(category, [])
         env_key = None
+        schema = CONFIG_SCHEMA.get(category, [])
         for field in schema:
             if field["key"] == key:
                 env_key = field.get("env_key")
                 break
         if not env_key:
             env_key = f"{category.upper()}_{key.upper()}"
+
         env_val = os.environ.get(env_key)
         if env_val is not None:
             return env_val
 
-        # 2. 数据库
+        pydantic_val = self._get_from_pydantic_settings(category, key)
+        if pydantic_val is not None:
+            return pydantic_val
+
         result = await self.db.execute(
             select(SystemConfig).where(
                 SystemConfig.category == category,
@@ -102,8 +105,58 @@ class ConfigService:
                     return row.value
             return row.value
 
-        # 3. 默认值
         return default
+
+    def _get_from_pydantic_settings(self, category: str, key: str) -> str | None:
+        """从 Pydantic Settings 读取配置值"""
+        settings_mapping = {
+            "database": {"url": "DATABASE_URL"},
+            "redis": {"url": "REDIS_URL", "host": "REDIS_HOST", "port": "REDIS_PORT"},
+            "milvus": {"host": "MILVUS_HOST", "port": "MILVUS_PORT", "collection": "MILVUS_COLLECTION"},
+            "llm": {
+                "provider": "LLM_PROVIDER", "api_key": "LLM_API_KEY", "api_base": "LLM_API_BASE",
+                "model": "LLM_MODEL", "embedding_model": "LLM_EMBEDDING_MODEL", "embedding_dim": "LLM_EMBEDDING_DIM",
+            },
+            "storage": {
+                "provider": "STORAGE_PROVIDER", "endpoint": "STORAGE_ENDPOINT",
+                "access_key": "STORAGE_ACCESS_KEY", "secret_key": "STORAGE_SECRET_KEY",
+                "bucket": "STORAGE_BUCKET", "region": "STORAGE_REGION", "use_ssl": "STORAGE_USE_SSL",
+            },
+            "keycloak": {
+                "server_url": "KEYCLOAK_SERVER_URL", "realm": "KEYCLOAK_REALM",
+                "client_id": "KEYCLOAK_CLIENT_ID", "client_secret": "KEYCLOAK_CLIENT_SECRET",
+            },
+            "security": {"cors_origins": "CORS_ORIGINS", "jwt_algorithm": "JWT_ALGORITHM"},
+            "audit": {"enabled": "AUDIT_LOG_ENABLED"},
+        }
+
+        env_key = pydantic_key = None
+        schema = CONFIG_SCHEMA.get(category, [])
+        for field in schema:
+            if field["key"] == key:
+                env_key = field.get("env_key")
+                break
+        if not env_key:
+            env_key = f"{category.upper()}_{key.upper()}"
+
+        pydantic_key = env_key.upper()
+
+        try:
+            from app.config import get_settings
+            settings = get_settings()
+            if hasattr(settings, pydantic_key):
+                val = getattr(settings, pydantic_key)
+                if val is not None and val != "":
+                    if isinstance(val, bool):
+                        return str(val).lower()
+                    if isinstance(val, list):
+                        import json
+                        return json.dumps(val)
+                    return str(val)
+        except Exception:
+            pass
+
+        return None
 
     async def get_category(self, category: str, mask_sensitive: bool = True) -> dict[str, str]:
         """获取某分类的所有配置，优先级：环境变量 > 数据库"""

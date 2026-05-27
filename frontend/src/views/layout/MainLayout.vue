@@ -17,17 +17,9 @@
           <el-icon><Odometer /></el-icon>
           <template #title>{{ t('dashboard.title') }}</template>
         </el-menu-item>
-        <el-menu-item index="/wiki">
-          <el-icon><Document /></el-icon>
-          <template #title>{{ t('wiki.title') }}</template>
-        </el-menu-item>
         <el-menu-item index="/qa">
           <el-icon><ChatDotRound /></el-icon>
           <template #title>{{ t('qa.title') }}</template>
-        </el-menu-item>
-        <el-menu-item index="/knowledge">
-          <el-icon><Compass /></el-icon>
-          <template #title>{{ t('knowledge.title') }}</template>
         </el-menu-item>
 
         <div class="menu-divider" />

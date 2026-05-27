@@ -140,7 +140,7 @@
           <el-form label-position="top">
             <el-form-item :label="t('setup.storage.provider')">
               <el-select v-model="form.storage.provider" :disabled="!!testing">
-                <el-option v-for="(label, key) in t('setup.storage.providers')" :key="key" :label="label" :value="key" />
+                <el-option v-for="provider in ['minio', 's3', 'oss']" :key="provider" :label="t(`setup.storage.providers.${provider}`)" :value="provider" />
               </el-select>
             </el-form-item>
             <el-form-item :label="t('setup.storage.host')">
@@ -379,7 +379,51 @@ async function testConnection(type) {
   finally { testing.value = null }
 }
 
-function nextStep() { currentStep.value++ }
+function nextStep() {
+  const validation = validateStep(currentStep.value)
+  if (!validation.valid) {
+    ElMessage.warning(validation.message)
+    return
+  }
+  currentStep.value++
+}
+
+function validateStep(step) {
+  switch (step) {
+    case 0:
+      if (!form.database.host) return { valid: false, message: t('setup.database.hostPlaceholder') }
+      if (!form.database.port) return { valid: false, message: t('setup.database.portPlaceholder') }
+      if (!form.database.user) return { valid: false, message: t('setup.database.userPlaceholder') }
+      if (!form.database.password) return { valid: false, message: t('setup.database.passwordPlaceholder') }
+      if (!form.database.name) return { valid: false, message: t('setup.database.namePlaceholder') }
+      break
+    case 1:
+      if (form.redis.host && !form.redis.port) {
+        return { valid: false, message: t('setup.redis.portPlaceholder') }
+      }
+      break
+    case 2:
+      if (!form.milvus.host) return { valid: false, message: t('setup.milvus.hostPlaceholder') }
+      if (!form.milvus.port) return { valid: false, message: t('setup.milvus.portPlaceholder') }
+      if (!form.milvus.collection) return { valid: false, message: t('setup.milvus.collectionPlaceholder') }
+      break
+    case 3:
+      if (!form.storage.host) return { valid: false, message: t('setup.storage.hostPlaceholder') }
+      if (!form.storage.port) return { valid: false, message: t('setup.storage.portPlaceholder') }
+      if (!form.storage.bucket) return { valid: false, message: t('setup.storage.bucketPlaceholder') }
+      break
+    case 4:
+      if (!form.llm.provider) return { valid: false, message: t('setup.llm.providerPlaceholder') }
+      if (!form.llm.api_key) return { valid: false, message: t('setup.llm.apiKeyPlaceholder') }
+      if (!form.llm.api_base) return { valid: false, message: t('setup.llm.apiBasePlaceholder') }
+      if (!form.llm.model) return { valid: false, message: t('setup.llm.modelPlaceholder') }
+      if (!form.llm.embedding_model) return { valid: false, message: t('setup.llm.embeddingModelPlaceholder') }
+      if (!form.llm.embedding_dim) return { valid: false, message: t('setup.llm.embeddingDimPlaceholder') }
+      break
+  }
+  
+  return { valid: true, message: '' }
+}
 
 async function handleInit() {
   passwordError.value = ''
